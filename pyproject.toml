@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yt-clipping-intelligence"
+version = "1.0.0"
+description = "Research-driven, rights-aware YouTube highlight discovery, heatmap intelligence, and vertical clip production engine."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "YouTube Clipping Platform Team"}
+]
+keywords = [
+    "youtube",
+    "clipping",
+    "shorts",
+    "tiktok",
+    "reels",
+    "faster-whisper",
+    "heatmap",
+    "video-processing",
+    "ffmpeg",
+    "nvenc"
+]
+dependencies = [
+    "faster-whisper>=1.0.0",
+    "opencv-python-headless>=4.10.0,<5.0.0",
+    "yt-dlp>=2026.10.0",
+    "numpy>=1.26.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+yt-clip = "src.yt_clipping.cli.master_cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
