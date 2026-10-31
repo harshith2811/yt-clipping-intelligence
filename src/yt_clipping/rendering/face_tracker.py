@@ -90,9 +90,9 @@ class FaceFocusedFramer:
         if center_x % 2 != 0:
             center_x -= 1
 
-        # Calculate sampling timestamps
-        step_seconds = 1.0 / max(self.sample_fps, 1.0)
-        num_samples = max(int(duration_seconds / step_seconds), 1)
+        # Sample at most 6 representative frames across the clip window for high-speed tracking
+        num_samples = max(min(int(duration_seconds * self.sample_fps), 6), 3)
+        step_seconds = duration_seconds / max(num_samples, 1)
 
         detected_x_positions: List[float] = []
         smoothed_x_positions: List[float] = []
@@ -102,8 +102,7 @@ class FaceFocusedFramer:
 
         for i in range(num_samples):
             t = start_seconds + (i * step_seconds)
-            frame_num = int(t * fps)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000.0)
             ret, frame = cap.read()
             if not ret or frame is None:
                 continue

@@ -127,10 +127,15 @@ def cmd_run(args: argparse.Namespace) -> None:
 
     pipeline = build_pipeline(output_dir=getattr(args, "output_dir", "data/rendered_clips"))
     vcodec = "h264_nvenc" if getattr(args, "gpu", False) else getattr(args, "vcodec", "libx264")
-    profile = RenderProfile(layout_mode=getattr(args, "layout", "blur_background"), vcodec=vcodec)
+    sub_preset = getattr(args, "subtitle_preset", "hormozi")
+    profile = RenderProfile(
+        layout_mode=getattr(args, "layout", "blur_background"),
+        vcodec=vcodec,
+        subtitle_preset=sub_preset,
+    )
 
     print(f"[*] Starting pipeline execution for video: {video_id}")
-    print(f"[*] Profile: {profile.name} (layout={profile.layout_mode}, vcodec={profile.vcodec}), dry_run={args.dry_run}")
+    print(f"[*] Profile: {profile.name} (layout={profile.layout_mode}, vcodec={profile.vcodec}, subs={profile.subtitle_preset}), dry_run={args.dry_run}")
 
     try:
         job = pipeline.process_video(
@@ -790,6 +795,7 @@ def main() -> None:
     p_run.add_argument("--video-id", required=True, help="Video ID to process")
     p_run.add_argument("--dry-run", action=argparse.BooleanOptionalAction, default=True, help="Simulate autopost handoff (default true)")
     p_run.add_argument("--layout", default="blur_background", choices=["blur_background", "crop_center", "split_screen", "active_speaker"], help="Visual layout profile")
+    p_run.add_argument("--subtitle-preset", default="hormozi", choices=["hormozi", "beast_bounce", "neon_cyber", "karaoke_gold", "bold_social", "karaoke", "clean_editorial", "classic"], help="Subtitle animation and aesthetic styling preset")
     p_run.add_argument("--threshold", type=float, default=65.0, help="Score threshold for auto-approval")
     p_run.add_argument("--gpu", action="store_true", help="Enable NVIDIA NVENC GPU hardware acceleration")
     p_run.add_argument("--vcodec", default="libx264", choices=["libx264", "h264_nvenc", "hevc_nvenc"], help="Video encoder codec")

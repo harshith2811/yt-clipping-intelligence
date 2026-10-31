@@ -166,3 +166,48 @@ def test_atomic_file_promotion_and_synthetic_render(tmp_path):
     assert not os.path.exists(f"{rendered.file_path}.tmp.mp4")
     assert os.path.exists(rendered.manifest_path)
     assert len(rendered.file_hash) == 64  # SHA-256
+
+
+def test_hormozi_kinetic_bounce_subtitles_and_sentiment(tmp_path):
+    sub_gen = SubtitleGenerator(style_preset="hormozi")
+    cand = HighlightCandidate(
+        candidate_id="c_hormozi",
+        video_id="v_hormozi",
+        start_seconds=0.0,
+        end_seconds=10.0,
+        duration_seconds=10.0,
+        score=90.0,
+        breakdown=ScoreBreakdown(),
+        hook_title="Hormozi Kinetic Test",
+    )
+    words = [
+        WordTimestamp(word="The", start=0.5, end=0.8),
+        WordTimestamp(word="infamous", start=0.9, end=1.4),
+        WordTimestamp(word="Zodiac", start=1.5, end=2.0),
+        WordTimestamp(word="killer", start=2.1, end=2.7),
+    ]
+    seg = TranscriptSegment(segment_id=1, start=0.5, end=2.7, text="The infamous Zodiac killer", words=words)
+    transcript = Transcript(video_id="v_hormozi", language="en", duration_seconds=10.0, text="The infamous Zodiac killer", segments=[seg])
+
+    out_ass = str(tmp_path / "hormozi.ass")
+    sub_gen.generate_ass(cand, transcript, out_ass)
+
+    assert os.path.exists(out_ass)
+    with open(out_ass, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Verify Impact font, uppercase conversion, and bounce animations
+    assert "Style: Default,Impact,66" in content
+    assert r"\fscx116" in content  # Bounce animation tag
+    assert "KILLER" in content     # Uppercase styling
+    assert r"\c&H002020FF&" in content  # Danger crimson red for 'KILLER'
+    assert r"\c&H0000D7FF&" in content  # Mystery gold for 'ZODIAC'
+
+
+def test_beast_bounce_rapid_chunks(tmp_path):
+    sub_gen = SubtitleGenerator(style_preset="beast_bounce")
+    assert sub_gen.chunk_size == 2
+    assert sub_gen.highlight_color == "&H0033FF00"  # Lime Green
+    assert sub_gen.bounce_animation is True
+    assert sub_gen.uppercase is True
+

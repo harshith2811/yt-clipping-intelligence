@@ -436,14 +436,17 @@ class RenderProfile:
     acodec: str = "aac"
     crf: int = 22
     burn_subtitles: bool = True
-    layout_mode: str = "blur_background"  # blur_background, crop_center, split_screen
+    layout_mode: str = "blur_background"  # blur_background, crop_center, split_screen, active_speaker
+    subtitle_preset: str = "hormozi"      # hormozi, beast_bounce, neon_cyber, karaoke_gold, bold_social
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> RenderProfile:
-        return cls(**data)
+        data_copy = dict(data)
+        data_copy.setdefault("subtitle_preset", "hormozi")
+        return cls(**data_copy)
 
 
 @dataclass

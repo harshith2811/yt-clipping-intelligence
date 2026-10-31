@@ -188,7 +188,11 @@ class FFmpegRenderer(Renderer):
         sub_path = None
         if profile.burn_subtitles and transcript:
             sub_path = os.path.join(output_dir, f"{candidate.candidate_id}.ass")
-            self.subtitles.generate_ass(candidate, transcript, sub_path)
+            generator = self.subtitles
+            preset = getattr(profile, "subtitle_preset", None)
+            if preset and preset in SubtitleGenerator.STYLE_PRESETS:
+                generator = SubtitleGenerator(style_preset=preset)
+            generator.generate_ass(candidate, transcript, sub_path)
 
         # Compute dynamic crop if active_speaker layout selected
         crop_override = None
