@@ -149,6 +149,7 @@ class FFmpegRenderer(Renderer):
         )
 
         # BUG-20 fix: explicitly specify -pix_fmt yuv420p for standard MP4 playback compatibility
+        # Audio sync fix: aresample=async=1 and avoid_negative_ts make_zero locks A/V alignment to PTS 0
         cmd = [
             "ffmpeg",
             "-y",
@@ -160,6 +161,8 @@ class FFmpegRenderer(Renderer):
             "-pix_fmt", "yuv420p",
             "-c:a", profile.acodec,
             "-b:a", "192k",
+            "-af", "aresample=async=1:first_pts=0",
+            "-avoid_negative_ts", "make_zero",
             "-movflags", "+faststart",
             output_path,
         ]

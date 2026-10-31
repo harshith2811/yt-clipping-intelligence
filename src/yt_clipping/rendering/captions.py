@@ -379,9 +379,13 @@ class SubtitleGenerator:
                                 w_rel_start = max(active_word.start - c_start, chunk_start)
 
                             if w_idx < len(chunk) - 1:
-                                w_rel_end = max(chunk[w_idx + 1].start - c_start, w_rel_start + 0.08)
+                                next_w_start = max(chunk[w_idx + 1].start - c_start, w_rel_start + 0.08)
+                                natural_w_end = max(active_word.end - c_start, w_rel_start + 0.08)
+                                # Cap active word duration so highlight does not linger across silence
+                                w_rel_end = min(next_w_start, max(natural_w_end + 0.06, w_rel_start + 0.12))
                             else:
-                                w_rel_end = seamless_chunk_end
+                                natural_w_end = max(active_word.end - c_start, w_rel_start + 0.08)
+                                w_rel_end = min(seamless_chunk_end, max(natural_w_end + 0.10, w_rel_start + 0.15))
 
                             if w_rel_end <= w_rel_start:
                                 w_rel_end = w_rel_start + 0.10
