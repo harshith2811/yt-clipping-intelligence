@@ -1,42 +1,94 @@
 """
 Discovery Ranking and Metric Observation Engine.
-Separates observed public momentum from internal retention predictions.
-Calculates view velocity across time snapshots and normalizes by channel baseline.
+Calculates mathematically sound view velocity across temporal snapshots,
+persists snapshots durably in SQLite to survive restarts,
+and normalizes discovery scores by channel baseline.
 """
 
 from typing import List, Dict, Optional
 from datetime import datetime, timezone
 import math
+import sqlite3
+
 from ..contracts.models import VideoCandidate, MetricSnapshot, CreatorSource
 from ..contracts.interfaces import MetricObserver
+from ..orchestration.db import DatabaseManager
 
 
 class PublicMetricRanker(MetricObserver):
     """
-    Records public metric snapshots and ranks videos using:
-    - Observed View Velocity (views gained per hour between observations)
+    Records public metric snapshots in SQLite and ranks videos using:
+    - Mathematically valid View Velocity (views gained per hour between observations)
+    - Minimum observation intervals to prevent division by near-zero time intervals
     - Channel Baseline Normalization (prevents large channels from dominating discovery)
-    - Recency Decay (prioritizes fresh uploads within lookback window)
+    - Recency Decay (exponential half-life of 48 hours)
     """
 
-    def __init__(self):
-        self._snapshots: Dict[str, List[MetricSnapshot]] = {}
+    MIN_OBSERVATION_SECONDS = 30.0  # Minimum interval to avoid noise spikes
+
+    def __init__(self, db_path: str = "data/jobs.db"):
+        self.db = DatabaseManager(db_path)
+        self._snapshots_cache: Dict[str, List[MetricSnapshot]] = {}
+        self._load_cached_snapshots()
+
+    def _load_cached_snapshots(self) -> None:
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.execute(
+                """
+                SELECT snapshot_id, video_id, timestamp, view_count, like_count, comment_count, calculated_velocity
+                FROM metric_snapshots ORDER BY timestamp ASC
+                """
+            )
+            for row in cursor.fetchall():
+                snap = MetricSnapshot(
+                    snapshot_id=row[0],
+                    video_id=row[1],
+                    timestamp=row[2],
+                    view_count=row[3],
+                    like_count=row[4],
+                    comment_count=row[5],
+                    calculated_velocity=row[6],
+                )
+                if snap.video_id not in self._snapshots_cache:
+                    self._snapshots_cache[snap.video_id] = []
+                self._snapshots_cache[snap.video_id].append(snap)
+        finally:
+            conn.close()
 
     def record_snapshot(
-        self, video_id: str, view_count: int, like_count: int = 0, comment_count: int = 0
+        self,
+        video_id: str,
+        view_count: int,
+        like_count: int = 0,
+        comment_count: int = 0,
+        channel_id: Optional[str] = None,
+        source: str = "api",
     ) -> MetricSnapshot:
+        """Records a metric snapshot to SQLite and updates velocity telemetry."""
         now_iso = datetime.now(timezone.utc).isoformat()
-        snap_id = f"snap-{video_id}-{len(self._snapshots.get(video_id, [])) + 1}"
+        existing = self._snapshots_cache.get(video_id, [])
+        snap_id = f"snap-{video_id}-{len(existing) + 1}"
 
-        existing = self._snapshots.get(video_id, [])
         velocity = 0.0
         if existing:
             prev = existing[-1]
             try:
                 t1 = datetime.fromisoformat(prev.timestamp.replace("Z", "+00:00"))
                 t2 = datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
-                hours = max((t2 - t1).total_seconds() / 3600.0, 0.001)
-                velocity = max((view_count - prev.view_count) / hours, 0.0)
+                delta_sec = (t2 - t1).total_seconds()
+
+                if delta_sec >= self.MIN_OBSERVATION_SECONDS:
+                    hours = delta_sec / 3600.0
+                    delta_views = view_count - prev.view_count
+                    # BUG-09 fix: handle view adjustments/decreases gracefully
+                    if delta_views < 0:
+                        velocity = 0.0
+                    else:
+                        velocity = delta_views / hours
+                else:
+                    # Too close to previous observation: retain previous velocity
+                    velocity = prev.calculated_velocity
             except Exception:
                 velocity = 0.0
 
@@ -50,21 +102,60 @@ class PublicMetricRanker(MetricObserver):
             calculated_velocity=round(velocity, 2),
         )
 
-        if video_id not in self._snapshots:
-            self._snapshots[video_id] = []
-        self._snapshots[video_id].append(snapshot)
+        # Persist to SQLite
+        conn = self.db.get_connection()
+        try:
+            with conn:
+                conn.execute(
+                    """
+                    INSERT INTO metric_snapshots (
+                        snapshot_id, video_id, channel_id, timestamp, view_count, like_count, comment_count, calculated_velocity, source
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        snapshot.snapshot_id,
+                        snapshot.video_id,
+                        channel_id,
+                        snapshot.timestamp,
+                        snapshot.view_count,
+                        snapshot.like_count,
+                        snapshot.comment_count,
+                        snapshot.calculated_velocity,
+                        source,
+                    ),
+                )
+        finally:
+            conn.close()
+
+        if video_id not in self._snapshots_cache:
+            self._snapshots_cache[video_id] = []
+        self._snapshots_cache[video_id].append(snapshot)
         return snapshot
 
     def calculate_view_velocity(self, snapshots: List[MetricSnapshot]) -> float:
+        """
+        Calculates observed view velocity across snapshots.
+        BUG-09 fix: Rejects inverted timestamps and near-zero intervals.
+        """
         if len(snapshots) < 2:
             return 0.0
+
         first = snapshots[0]
         last = snapshots[-1]
         try:
             t1 = datetime.fromisoformat(first.timestamp.replace("Z", "+00:00"))
             t2 = datetime.fromisoformat(last.timestamp.replace("Z", "+00:00"))
-            hours = max((t2 - t1).total_seconds() / 3600.0, 0.001)
-            return max((last.view_count - first.view_count) / hours, 0.0)
+            delta_sec = (t2 - t1).total_seconds()
+
+            if delta_sec < self.MIN_OBSERVATION_SECONDS:
+                return 0.0
+
+            hours = delta_sec / 3600.0
+            delta_views = last.view_count - first.view_count
+            if delta_views <= 0:
+                return 0.0
+
+            return round(delta_views / hours, 2)
         except Exception:
             return 0.0
 
@@ -89,27 +180,33 @@ class PublicMetricRanker(MetricObserver):
 
         # 2. Velocity Score (Relative to baseline)
         baseline = creator.baseline_views if creator and creator.baseline_views > 0 else 10000.0
-        snapshots = self._snapshots.get(candidate.video_id, [])
-        velocity = self.calculate_view_velocity(snapshots)
+        snapshots = self._snapshots_cache.get(candidate.video_id, [])
+
+        has_observed_snapshots = len(snapshots) >= 2
+        if has_observed_snapshots:
+            velocity = self.calculate_view_velocity(snapshots)
+        else:
+            velocity = candidate.view_count / max(age_hours, 1.0)
 
         # Expected hourly view rate ~ baseline / 48
         expected_hourly = max(baseline / 48.0, 10.0)
-        velocity_ratio = velocity / expected_hourly if velocity > 0 else (candidate.view_count / max(age_hours, 1.0)) / expected_hourly
+        velocity_ratio = velocity / expected_hourly
         velocity_score = min(velocity_ratio * 30.0, 100.0)
 
         # 3. Engagement Score (Likes / Views ratio)
         engagement_ratio = (candidate.like_count / max(candidate.view_count, 1)) if candidate.view_count > 0 else 0.0
-        # Average YouTube like ratio is ~4% (0.04)
+        # Benchmark YouTube like ratio is ~4% (0.04)
         engagement_score = min((engagement_ratio / 0.04) * 50.0, 100.0)
 
         # Composite score: Recency (35%), Velocity (50%), Engagement (15%)
         composite = (0.35 * recency_score) + (0.50 * velocity_score) + (0.15 * engagement_score)
         final_score = round(min(max(composite, 0.0), 100.0), 2)
 
+        velocity_type = "observed_velocity" if has_observed_snapshots else "lifetime_pace"
         candidate.discovery_score = final_score
         candidate.discovery_rationale = (
             f"Score {final_score}/100: Age={age_hours:.1f}h (recency={recency_score:.1f}), "
-            f"velocity_ratio={velocity_ratio:.2f}x baseline (velocity={velocity_score:.1f}), "
+            f"velocity_ratio={velocity_ratio:.2f}x baseline ({velocity_type}={velocity:.0f}/hr), "
             f"engagement={engagement_score:.1f}."
         )
         return final_score

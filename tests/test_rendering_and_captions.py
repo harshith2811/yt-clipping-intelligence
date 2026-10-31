@@ -47,6 +47,42 @@ def test_ass_subtitle_generation_with_safe_margins(tmp_path):
     assert "Building reliable AI clipping" in content
 
 
+def test_kinetic_karaoke_subtitle_generation(tmp_path):
+    sub_gen = SubtitleGenerator(style_preset="karaoke")
+    cand = HighlightCandidate(
+        candidate_id="c_karaoke",
+        video_id="v_karaoke",
+        start_seconds=0.0,
+        end_seconds=10.0,
+        duration_seconds=10.0,
+        score=85.0,
+        breakdown=ScoreBreakdown(),
+        hook_title="Karaoke Test",
+    )
+    words = [
+        WordTimestamp(word="Automated", start=0.5, end=1.2),
+        WordTimestamp(word="video", start=1.3, end=1.8),
+        WordTimestamp(word="clipping", start=1.9, end=2.5),
+    ]
+    seg = TranscriptSegment(segment_id=1, start=0.5, end=2.5, text="Automated video clipping", words=words)
+    transcript = Transcript(
+        video_id="v_karaoke", language="en", duration_seconds=10.0, text="Automated video clipping", segments=[seg]
+    )
+
+    out_ass = str(tmp_path / "karaoke_captions.ass")
+    sub_gen.generate_ass(cand, transcript, out_ass)
+
+    assert os.path.exists(out_ass)
+    with open(out_ass, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Verify karaoke {\k...} tags and font styling
+    assert r"{\k" in content
+    assert "Style: Default,Impact,58" in content
+    assert "MarginV,290" in content or "290,1" in content
+    assert "Dialogue:" in content
+
+
 def test_ffmpeg_filtergraph_construction():
     renderer = FFmpegRenderer()
     profile_center = RenderProfile(width=1080, height=1920, layout_mode="crop_center")

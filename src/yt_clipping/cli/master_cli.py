@@ -8,6 +8,8 @@ import argparse
 import sys
 import os
 import json
+import shutil
+import subprocess
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
@@ -22,20 +24,28 @@ from ..contracts.models import (
     RenderProfile,
     JobStatus,
 )
+from ..config import AppConfig
+from ..orchestration.db import DatabaseManager
 from ..rights.gate import LocalRightsPolicy
 from ..discovery.monitor import ChannelMonitor
 from ..discovery.ranker import PublicMetricRanker
 from ..discovery.heatmap import HeatmapAnalyzer
 from ..discovery.trend_analyzer import TrendAnalyzer
+from ..discovery.channel_registry import ChannelRegistry
+from ..discovery.daemon import DiscoveryDaemon
+from ..discovery.quota_governor import APIQuotaGovernor
 from ..ingestion.asset_provider import LocalAssetProvider
 from ..transcription.transcriber import LocalTranscriber
 from ..detection.segmenter import ContextAwareSegmenter
 from ..scoring.scorecard import ExplainableScorecardScorer
+from ..scoring.metadata_generator import MetadataGenerator
 from ..rendering.renderer import FFmpegRenderer
 from ..qa.verifier import MediaQualityVerifier
 from ..publisher.adapter import DualModeAutopostPublisher
 from ..orchestration.state_machine import JobJournal
 from ..orchestration.pipeline import ClippingPipeline
+from ..orchestration.storage_manager import StorageManager
+from ..orchestration.queue import JobQueue, JobPriority
 
 
 def build_pipeline(
@@ -46,15 +56,21 @@ def build_pipeline(
     autopost_inbox: str = "data/autopost_inbox",
     db_path: str = "data/jobs.db",
 ) -> ClippingPipeline:
-    rights_policy = LocalRightsPolicy(ledger_path)
+    cfg = AppConfig()
+    rights_policy = LocalRightsPolicy(ledger_path, db_path=db_path)
     asset_provider = LocalAssetProvider(assets_dir)
     transcriber = LocalTranscriber(transcripts_dir)
     detector = ContextAwareSegmenter()
     scorer = ExplainableScorecardScorer()
     renderer = FFmpegRenderer()
     verifier = MediaQualityVerifier()
-    publisher = DualModeAutopostPublisher(mode="watched_folder", watched_dir=autopost_inbox)
+    publisher = DualModeAutopostPublisher(mode="watched_folder", watched_dir=autopost_inbox, db_path=db_path)
     journal = JobJournal(db_path)
+    metadata_generator = MetadataGenerator(
+        llm_api_base=cfg.llm_api_base,
+        llm_api_key=cfg.llm_api_key,
+        model=cfg.llm_model,
+    )
 
     return ClippingPipeline(
         rights_policy=rights_policy,
@@ -66,6 +82,7 @@ def build_pipeline(
         verifier=verifier,
         publisher=publisher,
         journal=journal,
+        metadata_generator=metadata_generator,
         output_dir=output_dir,
     )
 
@@ -101,16 +118,23 @@ def cmd_rights_check(args: argparse.Namespace) -> None:
 
 
 def cmd_run(args: argparse.Namespace) -> None:
-    pipeline = build_pipeline(output_dir=args.output_dir)
-    vcodec = "h264_nvenc" if getattr(args, "gpu", False) else getattr(args, "vcodec", "libx264")
-    profile = RenderProfile(layout_mode=args.layout, vcodec=vcodec)
+    vid_input = getattr(args, "video_id_pos", None) or getattr(args, "video_id", None)
+    if not vid_input:
+        print("[ERROR] Please provide a video ID or URL.", file=sys.stderr)
+        sys.exit(1)
+    from ..ingestion.asset_provider import extract_youtube_video_id
+    video_id = extract_youtube_video_id(vid_input)
 
-    print(f"[*] Starting pipeline execution for video: {args.video_id}")
+    pipeline = build_pipeline(output_dir=getattr(args, "output_dir", "data/rendered_clips"))
+    vcodec = "h264_nvenc" if getattr(args, "gpu", False) else getattr(args, "vcodec", "libx264")
+    profile = RenderProfile(layout_mode=getattr(args, "layout", "blur_background"), vcodec=vcodec)
+
+    print(f"[*] Starting pipeline execution for video: {video_id}")
     print(f"[*] Profile: {profile.name} (layout={profile.layout_mode}, vcodec={profile.vcodec}), dry_run={args.dry_run}")
 
     try:
         job = pipeline.process_video(
-            video_id=args.video_id,
+            video_id=video_id,
             profile=profile,
             dry_run=args.dry_run,
             auto_approve_threshold=args.threshold,
@@ -136,15 +160,102 @@ def cmd_run(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
-def cmd_jobs(args: argparse.Namespace) -> None:
+def cmd_jobs_list(args: argparse.Namespace) -> None:
     journal = JobJournal(args.db)
-    filter_status = JobStatus(args.status) if args.status else None
-    jobs = journal.list_jobs(filter_status)
-    print(f"Found {len(jobs)} jobs (filter={args.status or 'ALL'}):")
+    filter_status = JobStatus(args.status) if getattr(args, "status", None) else None
+    limit = getattr(args, "limit", 50)
+    jobs = journal.list_jobs(filter_status, limit=limit)
+    print(f"\n[OK] Found {len(jobs)} jobs (filter={getattr(args, 'status', None) or 'ALL'}):")
     for j in jobs:
         print(f"- Job: {j.job_id} | Video: {j.video_id} | Stage: {j.current_stage.value} | Status: {j.status.value} | Updated: {j.updated_at}")
         if j.error_message:
             print(f"  Error: {j.error_message}")
+
+
+def cmd_jobs_inspect(args: argparse.Namespace) -> None:
+    journal = JobJournal(args.db)
+    job = journal.get_job(args.job_id)
+    if not job:
+        print(f"[ERROR] Job '{args.job_id}' not found in database.", file=sys.stderr)
+        sys.exit(1)
+
+    print("\n" + "=" * 60)
+    print(f" Job Inspection: {job.job_id}")
+    print("=" * 60)
+    print(f"Video ID        : {job.video_id}")
+    print(f"Current Stage   : {job.current_stage.value}")
+    print(f"Status          : {job.status.value}")
+    print(f"Retry Count     : {job.retry_count} / {job.max_retries}")
+    print(f"Created At      : {job.created_at}")
+    print(f"Updated At      : {job.updated_at}")
+    if job.error_message:
+        print(f"Error Message   : {job.error_message}")
+
+    if job.candidate:
+        c = job.candidate
+        print(f"\nHighlight Candidate: {c.candidate_id}")
+        print(f"  Window        : {c.start_seconds:.1f}s -> {c.end_seconds:.1f}s ({c.duration_seconds:.1f}s)")
+        print(f"  Score         : {c.score}/100 (Approval: {c.approval_status})")
+        print(f"  Title         : {c.hook_title}")
+        print(f"  Rationale     : {c.rationale}")
+
+    if job.rendered_clip:
+        rc = job.rendered_clip
+        print(f"\nRendered Clip: {rc.clip_id}")
+        print(f"  Path          : {rc.file_path}")
+        print(f"  SHA-256       : {rc.file_hash}")
+        print(f"  Duration      : {rc.duration_seconds:.1f}s | Dimensions: {rc.width}x{rc.height}")
+
+    if job.qa_report:
+        qa = job.qa_report
+        print(f"\nQA Report: {qa.qa_id}")
+        print(f"  Status        : {qa.status}")
+        print(f"  Duration OK   : {qa.duration_ok} (Actual: {qa.actual_duration:.1f}s vs Expected: {qa.expected_duration:.1f}s)")
+        print(f"  Errors        : {qa.errors}")
+        print(f"  Warnings      : {qa.warnings}")
+
+    if job.handoff_receipt:
+        rcpt = job.handoff_receipt
+        print(f"\nAutopost Receipt: {rcpt.receipt_id}")
+        print(f"  Status        : {rcpt.status} (Dry Run: {rcpt.dry_run})")
+        print(f"  Idempotency   : {rcpt.idempotency_key}")
+        print(f"  Target Mode   : {rcpt.target_mode}")
+
+    print(f"\nCheckpoints Recorded ({len(job.checkpoints)} total):")
+    for stg, cp in job.checkpoints.items():
+        print(f"  [{stg}] at {cp.get('timestamp')}")
+
+
+def cmd_jobs_retry(args: argparse.Namespace) -> None:
+    journal = JobJournal(args.db)
+    job = journal.get_job(args.job_id)
+    if not job:
+        print(f"[ERROR] Job '{args.job_id}' not found in database.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"[*] Retrying job '{args.job_id}' for video '{job.video_id}'...")
+    pipeline = build_pipeline(db_path=args.db)
+    try:
+        updated = pipeline.process_video(
+            video_id=job.video_id,
+            job_id=job.job_id,
+            dry_run=True,
+        )
+        print(f"\n[SUCCESS] Job {updated.job_id} retried successfully!")
+        print(f"Stage: {updated.current_stage.value} | Status: {updated.status.value}")
+    except Exception as e:
+        print(f"\n[ERROR] Job retry failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_jobs(args: argparse.Namespace) -> None:
+    jobs_cmd = getattr(args, "jobs_cmd", None)
+    if jobs_cmd == "inspect":
+        cmd_jobs_inspect(args)
+    elif jobs_cmd == "retry":
+        cmd_jobs_retry(args)
+    else:
+        cmd_jobs_list(args)
 
 
 def cmd_preview(args: argparse.Namespace) -> None:
@@ -279,6 +390,291 @@ def cmd_trends(args: argparse.Namespace) -> None:
         print("Please specify --video-id <ID> or --chart popular")
 
 
+def cmd_doctor(args: argparse.Namespace) -> None:
+    print("=" * 60)
+    print(" YouTube Clipping Intelligence Platform - Environment Doctor")
+    print("=" * 60)
+
+    all_ok = True
+
+    # 1. Python version
+    py_ver = sys.version_info
+    py_str = f"{py_ver.major}.{py_ver.minor}.{py_ver.micro}"
+    if py_ver >= (3, 10):
+        print(f"[PASS] Python Version: {py_str} (>= 3.10 required)")
+    else:
+        print(f"[FAIL] Python Version: {py_str} (< 3.10 is unsupported)")
+        all_ok = False
+
+    # 2. FFmpeg binary
+    ffmpeg_bin = shutil.which("ffmpeg")
+    if ffmpeg_bin:
+        try:
+            res = subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+            first_line = res.stdout.splitlines()[0] if res.stdout else "unknown version"
+            print(f"[PASS] FFmpeg Binary: {ffmpeg_bin} ({first_line[:40]})")
+        except Exception as e:
+            print(f"[FAIL] FFmpeg found at {ffmpeg_bin} but failed execution: {e}")
+            all_ok = False
+    else:
+        print("[FAIL] FFmpeg not found in PATH!")
+        all_ok = False
+
+    # 3. FFprobe binary
+    ffprobe_bin = shutil.which("ffprobe")
+    if ffprobe_bin:
+        try:
+            res = subprocess.run(["ffprobe", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+            first_line = res.stdout.splitlines()[0] if res.stdout else "unknown version"
+            print(f"[PASS] FFprobe Binary: {ffprobe_bin} ({first_line[:40]})")
+        except Exception:
+            print(f"[WARN] FFprobe found at {ffprobe_bin} but had execution error. (Will use OpenCV fallback)")
+    else:
+        print("[WARN] FFprobe not found in PATH. Probing will use OpenCV/FFmpeg fallback.")
+
+    # 4. SQLite Database connectivity & WAL mode
+    db_path = getattr(args, "db", "data/jobs.db")
+    try:
+        db = DatabaseManager(db_path)
+        conn = db.get_connection()
+        cur = conn.execute("PRAGMA journal_mode;")
+        mode = cur.fetchone()[0]
+        conn.close()
+        print(f"[PASS] SQLite Database: {db_path} (Journal Mode: {mode.upper()})")
+    except Exception as e:
+        print(f"[FAIL] SQLite database error at {db_path}: {e}")
+        all_ok = False
+
+    # 5. Hardware Acceleration (CUDA / PyTorch / ctranslate2)
+    cuda_found = False
+    try:
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() > 0:
+            print(f"[PASS] GPU Acceleration: {ctranslate2.get_cuda_device_count()} CUDA device(s) detected via ctranslate2")
+            cuda_found = True
+    except Exception:
+        pass
+    if not cuda_found:
+        try:
+            import torch
+            if torch.cuda.is_available():
+                print(f"[PASS] GPU Acceleration: {torch.cuda.get_device_name(0)} detected via torch")
+                cuda_found = True
+        except Exception:
+            pass
+    if not cuda_found:
+        print("[INFO] GPU Acceleration: No CUDA GPU detected. Running in high-performance CPU (Int8) cascade.")
+
+    # 6. Storage directories & write permissions
+    cfg = AppConfig()
+    dirs_to_check = [
+        ("Base Data", cfg.base_data_dir),
+        ("Assets", cfg.assets_dir),
+        ("Transcripts", cfg.transcripts_dir),
+        ("Rendered Clips", cfg.output_dir),
+        ("Temp", cfg.temp_dir),
+        ("Heatmaps", cfg.heatmaps_dir),
+        ("Autopost Inbox", cfg.autopost_inbox),
+    ]
+    for dname, dpath in dirs_to_check:
+        os.makedirs(dpath, exist_ok=True)
+        test_file = os.path.join(dpath, ".perm_test")
+        try:
+            with open(test_file, "w") as f:
+                f.write("test")
+            os.remove(test_file)
+            print(f"[PASS] Directory Writable: {dname} ({dpath})")
+        except Exception as e:
+            print(f"[FAIL] Directory Not Writable: {dname} ({dpath}): {e}")
+            all_ok = False
+
+    # 7. Quota Governor Status
+    try:
+        gov = APIQuotaGovernor(db_path=db_path)
+        st = gov.get_status()
+        print(f"[PASS] API Quota Governor: Spent Today: {st['units_spent']}/{st['daily_limit']} units (Cost Control 90%: {st['cost_control_active']})")
+    except Exception as e:
+        print(f"[WARN] Could not check quota status: {e}")
+
+    # 8. AI Vision & Subject Tracking Models
+    yunet_path = "models/face_detection_yunet_2023mar.onnx"
+    if os.path.exists(yunet_path):
+        print(f"[PASS] Face Tracking Model: YuNet ONNX ({yunet_path}) ready")
+    else:
+        print(f"[INFO] Face Tracking Model: Haar Cascade default (YuNet optional at {yunet_path})")
+
+    yolo_seg_path = "models/yolov8n-seg.pt"
+    yolo_det_path = "models/yolov8n.pt"
+    if os.path.exists(yolo_seg_path) or os.path.exists(yolo_det_path):
+        active_yolo = yolo_seg_path if os.path.exists(yolo_seg_path) else yolo_det_path
+        print(f"[PASS] Subject Detection & Segmentation: YOLOv8 ({active_yolo}) ready")
+    else:
+        print("[INFO] Subject Detection: OpenCV contours / haar fallback (YOLO optional)")
+
+    # 9. Voice Synthesis & TTS Models
+    tts_ready = False
+    try:
+        import edge_tts
+        print("[PASS] Neural TTS Model: Edge-TTS (Microsoft Neural Studio voices) ready")
+        tts_ready = True
+    except ImportError:
+        pass
+    try:
+        import pyttsx3
+        if not tts_ready:
+            print("[PASS] Local TTS Model: pyttsx3 (SAPI5 offline voices) ready")
+            tts_ready = True
+    except ImportError:
+        pass
+    if not tts_ready:
+        print("[INFO] TTS: Not installed (optional for voiceover synthesis)")
+
+    print("=" * 60)
+    if all_ok:
+        print("[SUCCESS] All system prerequisites satisfied. Platform ready for production!")
+    else:
+        print("[ERROR] One or more prerequisites failed. Please resolve above issues.")
+        sys.exit(1)
+
+
+def cmd_tts(args: argparse.Namespace) -> None:
+    from ..audio.tts_engine import TTSEngine
+    engine = TTSEngine(default_voice=args.voice)
+    print(f"[*] Synthesizing voiceover narration (voice={args.voice or engine.default_voice})...")
+    out = engine.synthesize(args.text, output_path=args.output, voice=args.voice)
+    print(f"\n[OK] Voiceover synthesized successfully!")
+    print(f"File: {out}")
+    print(f"Size: {os.path.getsize(out):,} bytes")
+
+
+def cmd_config_validate(args: argparse.Namespace) -> None:
+    cfg = AppConfig.from_env_and_cli()
+    print("=" * 60)
+    print(" Active Configuration (Secrets Masked)")
+    print("=" * 60)
+    masked = cfg.get_masked_config()
+    for k, v in masked.items():
+        print(f"  {k:<30}: {v}")
+    print("-" * 60)
+    warnings = cfg.validate_environment()
+    if warnings:
+        print("[!] Configuration Warnings:")
+        for w in warnings:
+            print(f"  - {w}")
+    else:
+        print("[OK] Configuration validated with no warnings.")
+
+
+def cmd_cleanup(args: argparse.Namespace) -> None:
+    manager = StorageManager()
+    print(f"[*] Running storage cleanup (retention_days={args.days}, temp_only={args.temp_only}, dry_run={args.dry_run})...")
+    report = manager.run_cleanup(retention_days=args.days, temp_only=args.temp_only, dry_run=args.dry_run)
+    rep_dict = report.to_dict()
+    print(f"\n[REPORT] Scanned Bytes: {rep_dict['total_scanned_bytes']:,} | Reclaimable: {rep_dict['total_reclaimable_mb']} MB ({rep_dict['items_count']} files)")
+    print(f"Mode: {'DRY RUN (no files modified)' if report.dry_run else 'LIVE PURGE (files deleted)'}")
+    if rep_dict["items"]:
+        print("\nCandidate files:")
+        for it in rep_dict["items"][:20]:
+            print(f"  - [{it['file_type']}] {it['path']} ({it['size_bytes']:,} bytes) -> {it['action']}")
+        if len(rep_dict["items"]) > 20:
+            print(f"  ... and {len(rep_dict['items']) - 20} more files.")
+
+
+def cmd_channels(args: argparse.Namespace) -> None:
+    registry = ChannelRegistry(args.db)
+    if args.channel_cmd == "add":
+        registry.add_channel(
+            channel_id=args.channel_id,
+            name=args.name,
+            handle=args.handle,
+            channel_url=args.url,
+            baseline_views=args.baseline,
+        )
+        print(f"[OK] Added/Updated monitored channel: {args.name} ({args.channel_id})")
+    elif args.channel_cmd == "list":
+        channels = registry.list_channels(active_only=not args.all)
+        print(f"\n[OK] Monitored Channels ({len(channels)} total):")
+        for ch in channels:
+            status = "ACTIVE" if ch["active"] else "INACTIVE"
+            print(f"  [{status}] {ch['name']} ({ch['channel_id']})")
+            print(f"       Handle: {ch['handle'] or 'N/A'} | Baseline: {ch['baseline_views']:,.0f} views")
+            print(f"       Last Polled: {ch['last_polled_at'] or 'Never'}")
+    elif args.channel_cmd == "remove":
+        removed = registry.remove_channel(args.channel_id)
+        if removed:
+            print(f"[OK] Deactivated channel {args.channel_id} from monitoring.")
+        else:
+            print(f"[WARN] Channel {args.channel_id} not found.")
+
+
+def cmd_daemon(args: argparse.Namespace) -> None:
+    print(f"[*] Starting continuous Discovery Daemon (interval={args.interval}s, max_iterations={args.max_iterations})...")
+    daemon = DiscoveryDaemon(interval_seconds=args.interval)
+    telemetry = daemon.run(max_iterations=args.max_iterations)
+    print("\n[OK] Daemon stopped. Telemetry summary:")
+    print(json.dumps(telemetry, indent=2))
+
+
+def cmd_queue(args: argparse.Namespace) -> None:
+    queue = JobQueue(args.db)
+    if args.queue_cmd == "status":
+        st = queue.get_status()
+        print(f"\n[OK] Job Queue Status (Total: {st['total_jobs']}):")
+        print("\nCounts by Status:")
+        for s, c in st["counts_by_status"].items():
+            print(f"  {s:<15}: {c}")
+        print("\nCounts by Stage:")
+        for stg, c in st["counts_by_stage"].items():
+            print(f"  {stg:<20}: {c}")
+        if st["recent_jobs"]:
+            print("\nRecent Jobs:")
+            for j in st["recent_jobs"]:
+                print(f"  - [{j['status']}] {j['job_id']} (video: {j['video_id']}, priority: {j['priority']}, retries: {j['retry_count']}/{j['max_retries']})")
+
+
+def cmd_dlq(args: argparse.Namespace) -> None:
+    publisher = DualModeAutopostPublisher(db_path=args.db)
+    if args.dlq_cmd == "list":
+        items = publisher.list_dlq_items()
+        print(f"\n[OK] Dead-Letter Queue ({len(items)} items):")
+        for it in items:
+            print(f"  - [{it['status']}] ID: {it['item_id']} | Clip: {it['clip_id']} | Target: {it['target_url']}")
+            print(f"    Attempts: {it['attempt_count']} | Last Error: {it['last_error']}")
+    elif args.dlq_cmd == "retry":
+        res = publisher.retry_dlq_item(args.item_id)
+        if res:
+            print(f"[OK] Successfully redelivered DLQ item {args.item_id}")
+        else:
+            print(f"[ERROR] Failed to redeliver DLQ item {args.item_id}. See logs for details.")
+
+
+def cmd_quota(args: argparse.Namespace) -> None:
+    gov = APIQuotaGovernor(db_path=args.db)
+    st = gov.get_status()
+    print("\n[OK] YouTube Data API Quota Governor Status:")
+    print(f"  Units Spent Today: {st['units_spent']:,} / {st['daily_limit']:,} ({st['pct_consumed']}%)")
+    print(f"  Units Remaining: {st['units_remaining']:,}")
+    print(f"  Cost Control Active (90% threshold): {st['cost_control_active']}")
+    print(f"  Reset Schedule: {st['reset_time_utc']}")
+
+
+def cmd_ingest(args: argparse.Namespace) -> None:
+    policy = LocalRightsPolicy(args.ledger, db_path=args.db)
+    manifest = policy.check_rights(args.video_id)
+    if not policy.verify_rights(manifest):
+        print(f"[ERROR] Rights verification failed for video '{args.video_id}'. Status: {manifest.status.value}", file=sys.stderr)
+        print("Asset download prohibited without explicit verified rights in rights ledger.", file=sys.stderr)
+        sys.exit(1)
+    provider = LocalAssetProvider(storage_dir=args.assets_dir)
+    print(f"[*] Ingesting asset for video: {args.video_id}...")
+    asset_path = provider.download_asset(args.video_id, manifest)
+    probe = provider.probe_asset(asset_path)
+    print(f"\n[OK] Asset successfully ingested and probed!")
+    print(f"Path: {asset_path}")
+    print(f"Duration: {probe['duration']:.2f}s | Dimensions: {probe['width']}x{probe['height']}")
+    print(f"SHA-256: {probe['sha256']}")
+
+
 def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         try:
@@ -291,6 +687,83 @@ def main() -> None:
         description="YouTube Clipping Intelligence Platform CLI",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Doctor command
+    p_doc = subparsers.add_parser("doctor", help="Inspect and diagnose local platform dependencies and environment")
+    p_doc.add_argument("--db", default="data/jobs.db", help="Path to SQLite jobs database")
+    p_doc.set_defaults(func=cmd_doctor)
+
+    # Config command
+    p_cfg = subparsers.add_parser("config", help="Inspect and validate active application configuration")
+    cfg_sub = p_cfg.add_subparsers(dest="config_cmd", required=True)
+    p_cfg_val = cfg_sub.add_parser("validate", help="Validate environment variables and print active config")
+    p_cfg_val.set_defaults(func=cmd_config_validate)
+
+    # Cleanup command
+    p_clean = subparsers.add_parser("cleanup", help="Prune intermediate rendering chunks and cache artifacts")
+    p_clean.add_argument("--days", type=int, default=7, help="Retention period in days (default: 7)")
+    p_clean.add_argument("--temp-only", action="store_true", help="Clean only temporary rendering files")
+    p_clean.add_argument("--dry-run", action=argparse.BooleanOptionalAction, default=True, help="Simulate cleanup without deleting (default true)")
+    p_clean.set_defaults(func=cmd_cleanup)
+
+    # Channels command
+    p_chan = subparsers.add_parser("channels", help="Manage monitored YouTube creator channel registry")
+    chan_sub = p_chan.add_subparsers(dest="channel_cmd", required=True)
+    
+    p_ch_add = chan_sub.add_parser("add", help="Add or update monitored channel")
+    p_ch_add.add_argument("--channel-id", required=True, help="Canonical YouTube channel ID (UC...)")
+    p_ch_add.add_argument("--name", required=True, help="Creator or channel name")
+    p_ch_add.add_argument("--handle", default=None, help="Channel handle (@creator)")
+    p_ch_add.add_argument("--url", default=None, help="Channel URL")
+    p_ch_add.add_argument("--baseline", type=float, default=10000.0, help="Baseline view benchmark")
+    p_ch_add.add_argument("--db", default="data/jobs.db", help="Path to SQLite database")
+
+    p_ch_list = chan_sub.add_parser("list", help="List monitored channels")
+    p_ch_list.add_argument("--all", action="store_true", help="Include inactive channels")
+    p_ch_list.add_argument("--db", default="data/jobs.db", help="Path to SQLite database")
+
+    p_ch_rem = chan_sub.add_parser("remove", help="Deactivate monitored channel")
+    p_ch_rem.add_argument("--channel-id", required=True, help="Channel ID or handle to remove")
+    p_ch_rem.add_argument("--db", default="data/jobs.db", help="Path to SQLite database")
+    p_chan.set_defaults(func=cmd_channels)
+
+    # Daemon command
+    p_daemon = subparsers.add_parser("daemon", help="Run continuous background channel polling daemon")
+    p_daemon.add_argument("--interval", type=int, default=300, help="Polling cycle interval in seconds (default: 300)")
+    p_daemon.add_argument("--max-iterations", type=int, default=None, help="Stop after N cycles (for testing)")
+    p_daemon.set_defaults(func=cmd_daemon)
+
+    # Queue command
+    p_queue = subparsers.add_parser("queue", help="Inspect priority job queue status")
+    queue_sub = p_queue.add_subparsers(dest="queue_cmd", required=True)
+    p_q_stat = queue_sub.add_parser("status", help="Display job queue status and counts")
+    p_q_stat.add_argument("--db", default="data/jobs.db", help="Path to SQLite jobs database")
+    p_queue.set_defaults(func=cmd_queue)
+
+    # DLQ command
+    p_dlq = subparsers.add_parser("dlq", help="Inspect and retry webhook dead-letter queue records")
+    dlq_sub = p_dlq.add_subparsers(dest="dlq_cmd", required=True)
+    p_dlq_list = dlq_sub.add_parser("list", help="List failed webhook deliveries")
+    p_dlq_list.add_argument("--db", default="data/jobs.db", help="Path to SQLite database")
+    p_dlq_retry = dlq_sub.add_parser("retry", help="Retry delivery for a dead-letter item")
+    p_dlq_retry.add_argument("--item-id", required=True, help="DLQ Item ID to retry")
+    p_dlq_retry.add_argument("--db", default="data/jobs.db", help="Path to SQLite database")
+    p_dlq.set_defaults(func=cmd_dlq)
+
+    # Quota command
+    p_quota = subparsers.add_parser("quota", help="Inspect daily YouTube Data API quota expenditure")
+    quota_sub = p_quota.add_subparsers(dest="quota_cmd", required=True)
+    p_quota_stat = quota_sub.add_parser("status", help="Show today's quota usage, limits, and cost control")
+    p_quota_stat.add_argument("--db", default="data/jobs.db", help="Path to SQLite database")
+    p_quota.set_defaults(func=cmd_quota)
+
+    # Ingest command
+    p_ing = subparsers.add_parser("ingest", help="Ingest and probe authorized video asset")
+    p_ing.add_argument("--video-id", required=True, help="Video ID or URL to ingest")
+    p_ing.add_argument("--ledger", default="data/rights_ledger.json", help="Path to rights ledger")
+    p_ing.add_argument("--assets-dir", default="data/assets", help="Directory for source assets")
+    p_ing.add_argument("--db", default="data/jobs.db", help="Path to SQLite database")
+    p_ing.set_defaults(func=cmd_ingest)
 
     # Rights command
     p_rights = subparsers.add_parser("rights", help="Inspect and register content rights")
@@ -316,12 +789,19 @@ def main() -> None:
     p_run = subparsers.add_parser("run", help="Run end-to-end clipping pipeline on authorized asset")
     p_run.add_argument("--video-id", required=True, help="Video ID to process")
     p_run.add_argument("--dry-run", action=argparse.BooleanOptionalAction, default=True, help="Simulate autopost handoff (default true)")
-    p_run.add_argument("--layout", default="blur_background", choices=["blur_background", "crop_center", "split_screen"], help="Visual layout profile")
+    p_run.add_argument("--layout", default="blur_background", choices=["blur_background", "crop_center", "split_screen", "active_speaker"], help="Visual layout profile")
     p_run.add_argument("--threshold", type=float, default=65.0, help="Score threshold for auto-approval")
     p_run.add_argument("--gpu", action="store_true", help="Enable NVIDIA NVENC GPU hardware acceleration")
     p_run.add_argument("--vcodec", default="libx264", choices=["libx264", "h264_nvenc", "hevc_nvenc"], help="Video encoder codec")
     p_run.add_argument("--output-dir", default="data/rendered_clips", help="Directory for rendered clips")
     p_run.set_defaults(func=cmd_run)
+
+    # TTS command
+    p_tts = subparsers.add_parser("tts", help="Synthesize AI voiceover speech from text")
+    p_tts.add_argument("--text", required=True, help="Text to speak")
+    p_tts.add_argument("--voice", default="en-US-ChristopherNeural", help="Voice identifier (e.g. christopher, jenny, guy, aria)")
+    p_tts.add_argument("--output", default=None, help="Output audio file path (.mp3 or .wav)")
+    p_tts.set_defaults(func=cmd_tts)
 
     # Jobs command
     p_jobs = subparsers.add_parser("jobs", help="List and inspect pipeline jobs")

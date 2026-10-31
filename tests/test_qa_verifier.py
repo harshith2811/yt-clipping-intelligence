@@ -9,7 +9,7 @@ from src.yt_clipping.qa.verifier import MediaQualityVerifier
 
 
 def test_qa_verifier_passes_valid_artifact(tmp_path):
-    verifier = MediaQualityVerifier()
+    verifier = MediaQualityVerifier(strict=False)
     test_mp4 = str(tmp_path / "valid_clip.mp4")
 
     # Create dummy mp4 file with standard ftyp box
@@ -44,6 +44,40 @@ def test_qa_verifier_passes_valid_artifact(tmp_path):
     assert report.video_stream_ok is True
     assert report.file_size_bytes > 1024
     assert len(report.errors) == 0
+
+
+def test_qa_verifier_strict_rejects_corrupted_container(tmp_path):
+    verifier = MediaQualityVerifier(strict=True)
+    test_mp4 = str(tmp_path / "corrupt_clip.mp4")
+    with open(test_mp4, "wb") as f:
+        f.write(b'\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2mp41' + (b'\x00' * 5000))
+
+    clip = RenderedClip(
+        clip_id="c_corrupt",
+        job_id="j_corrupt",
+        candidate_id="cand_corrupt",
+        file_path=test_mp4,
+        file_hash="",
+        duration_seconds=35.0,
+        width=1080,
+        height=1920,
+        manifest_path="manifest.json",
+        rendered_at="2026-10-29T12:00:00Z",
+    )
+    cand = HighlightCandidate(
+        candidate_id="cand_corrupt",
+        video_id="v1",
+        start_seconds=0.0,
+        end_seconds=35.0,
+        duration_seconds=35.0,
+        score=85.0,
+        breakdown=ScoreBreakdown(),
+        hook_title="Corrupt Hook",
+    )
+
+    report = verifier.verify_clip(clip, cand)
+    assert report.status == "FAILED"
+    assert any("unreadable or corrupted" in e for e in report.errors)
 
 
 def test_qa_verifier_fails_missing_file():

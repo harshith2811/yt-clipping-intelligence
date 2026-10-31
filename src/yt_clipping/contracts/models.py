@@ -181,9 +181,23 @@ class TranscriptSegment:
     words: List[WordTimestamp] = field(default_factory=list)
     speaker_tag: Optional[str] = None
 
+    def __post_init__(self):
+        if isinstance(self.segment_id, str):
+            import re
+            digits = re.findall(r"\d+", self.segment_id)
+            if digits:
+                self.segment_id = int(digits[0])
+            else:
+                self.segment_id = abs(hash(self.segment_id)) % 1000000
+        elif not isinstance(self.segment_id, int):
+            try:
+                self.segment_id = int(self.segment_id)
+            except Exception:
+                self.segment_id = 1
+
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "segment_id": self.segment_id,
+            "segment_id": int(self.segment_id),
             "start": self.start,
             "end": self.end,
             "text": self.text,
@@ -194,10 +208,11 @@ class TranscriptSegment:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> TranscriptSegment:
         words = [WordTimestamp.from_dict(w) for w in data.get("words", [])]
+        raw_id = data.get("segment_id", 1)
         return cls(
-            segment_id=data["segment_id"],
-            start=data["start"],
-            end=data["end"],
+            segment_id=raw_id,
+            start=float(data["start"]),
+            end=float(data["end"]),
             text=data["text"],
             words=words,
             speaker_tag=data.get("speaker_tag"),
@@ -497,6 +512,21 @@ class HandoffReceipt:
         return cls(**data)
 
 
+def compute_canonical_idempotency_key(
+    video_id: str,
+    start_seconds: float,
+    end_seconds: float,
+    rights_id: Optional[str] = None,
+) -> str:
+    """
+    Computes a canonical SHA-256 idempotency key across all pipeline operations.
+    Enforces 3-decimal fixed point rounding for deterministic repeatability.
+    """
+    rid = rights_id or "unspecified"
+    raw = f"{video_id}:{start_seconds:.3f}:{end_seconds:.3f}:{rid}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 @dataclass
 class ClipJob:
     job_id: str
@@ -526,9 +556,14 @@ class ClipJob:
     def compute_idempotency_key(self) -> str:
         if not self.candidate:
             raw = f"{self.job_id}:{self.video_id}"
-        else:
-            raw = f"{self.video_id}:{self.candidate.start_seconds:.3f}:{self.candidate.end_seconds:.3f}"
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        rights_id = self.rights_manifest.rights_id if self.rights_manifest else None
+        return compute_canonical_idempotency_key(
+            video_id=self.video_id,
+            start_seconds=self.candidate.start_seconds,
+            end_seconds=self.candidate.end_seconds,
+            rights_id=rights_id,
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         return {

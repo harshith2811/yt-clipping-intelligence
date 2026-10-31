@@ -2,6 +2,7 @@
 Context-Preserving Candidate Segmenter.
 Discovers complete, coherent moments using sentence boundaries, pauses,
 and target duration constraints rather than arbitrary fixed time windows.
+Guarantees end_time > start_time and duration > 0.
 """
 
 from typing import List, Optional
@@ -33,6 +34,10 @@ class ContextAwareSegmenter(HighlightDetector):
         seg_counter = 1
         for seg in segments:
             dur = seg.end - seg.start
+            # Skip invalid or negative-duration segments
+            if dur <= 0.0:
+                continue
+
             if dur <= max_dur:
                 normalized.append(seg)
                 continue
@@ -45,19 +50,20 @@ class ContextAwareSegmenter(HighlightDetector):
                     chunk_words.append(w)
                     if (w.end - w_start) >= self.target_duration:
                         chunk_text = " ".join(cw.word for cw in chunk_words)
-                        normalized.append(
-                            TranscriptSegment(
-                                segment_id=seg_counter,
-                                start=w_start,
-                                end=w.end,
-                                text=chunk_text,
-                                words=chunk_words,
+                        if w.end > w_start:
+                            normalized.append(
+                                TranscriptSegment(
+                                    segment_id=seg_counter,
+                                    start=w_start,
+                                    end=w.end,
+                                    text=chunk_text,
+                                    words=chunk_words,
+                                )
                             )
-                        )
-                        seg_counter += 1
+                            seg_counter += 1
                         chunk_words = []
                         w_start = w.end
-                if chunk_words:
+                if chunk_words and chunk_words[-1].end > w_start:
                     chunk_text = " ".join(cw.word for cw in chunk_words)
                     normalized.append(
                         TranscriptSegment(
@@ -82,6 +88,9 @@ class ContextAwareSegmenter(HighlightDetector):
                     c_idx = idx // chunk_size
                     c_start = round(seg.start + (c_idx * chunk_dur), 2)
                     c_end = round(min(c_start + chunk_dur, seg.end), 2)
+                    # BUG-15 fix: strictly require c_end > c_start
+                    if c_end <= c_start:
+                        continue
                     normalized.append(
                         TranscriptSegment(
                             segment_id=seg_counter,
@@ -94,11 +103,105 @@ class ContextAwareSegmenter(HighlightDetector):
                     seg_counter += 1
         return normalized
 
+    def _generate_candidates_from_duration(
+        self,
+        video_id: str,
+        total_duration: float,
+        min_duration: float,
+        max_duration: float,
+        deduplicate: bool = True,
+    ) -> List[HighlightCandidate]:
+        """
+        Generates candidate highlight moments when transcripts are unavailable,
+        strictly enforcing positive start times, end > start, min/max duration bounds,
+        and source media duration boundaries using a sliding window strategy with boundary backward extension.
+        """
+        candidates: List[HighlightCandidate] = []
+        if total_duration < 1.0:
+            return []
+
+        # If source media is shorter than min_duration, allow single clip of full duration if >= 3.0s
+        if total_duration <= min_duration:
+            cid = f"cand-{video_id}-{uuid.uuid4().hex[:8]}"
+            cand = HighlightCandidate(
+                candidate_id=cid,
+                video_id=video_id,
+                start_seconds=0.0,
+                end_seconds=round(total_duration, 2),
+                duration_seconds=round(total_duration, 2),
+                score=60.0,
+                breakdown=ScoreBreakdown(
+                    hook_score=5.0,
+                    moment_score=5.0,
+                    coherence_score=6.0,
+                    pacing_score=6.0,
+                    confidence=0.7,
+                    rationale="Duration-bounded full-length candidate without transcript.",
+                ),
+                hook_title=f"Highlight Window 0.0s - {total_duration:.1f}s",
+                suggested_description=f"Highlight from {video_id}: 0.0s to {total_duration:.1f}s",
+                rationale=f"Full-source candidate window bounded to media duration {total_duration:.1f}s.",
+                transcript_text="",
+            )
+            return [cand]
+
+        target_win = min(self.target_duration, max_duration)
+        step = max(target_win / 2.0, 10.0)
+
+        cur_start = 0.0
+        while cur_start < total_duration:
+            cur_end = min(cur_start + target_win, total_duration)
+            cur_dur = cur_end - cur_start
+
+            # Boundary clipping strategy:
+            # If remaining duration near boundary is below min_duration, extend start backward
+            if cur_dur < min_duration:
+                if cur_start > 0:
+                    cur_start = max(0.0, cur_end - min_duration)
+                    cur_dur = cur_end - cur_start
+                else:
+                    break
+
+            if cur_dur >= min_duration and cur_dur <= max_duration:
+                cid = f"cand-{video_id}-{uuid.uuid4().hex[:8]}"
+                cand = HighlightCandidate(
+                    candidate_id=cid,
+                    video_id=video_id,
+                    start_seconds=round(cur_start, 2),
+                    end_seconds=round(cur_end, 2),
+                    duration_seconds=round(cur_dur, 2),
+                    score=65.0,
+                    breakdown=ScoreBreakdown(
+                        hook_score=5.0,
+                        moment_score=5.0,
+                        coherence_score=6.0,
+                        pacing_score=6.0,
+                        confidence=0.7,
+                        rationale="Duration-bounded sliding window without transcript.",
+                    ),
+                    hook_title=f"Highlight Moment at {cur_start:.0f}s",
+                    suggested_description=f"Highlight from {video_id}: {cur_start:.1f}s to {cur_end:.1f}s",
+                    rationale=f"Duration-bounded candidate window ({cur_dur:.1f}s) without transcript.",
+                    transcript_text="",
+                )
+                if cand.validate_bounds(total_duration):
+                    candidates.append(cand)
+
+            if cur_end >= total_duration:
+                break
+            cur_start += step
+
+        if not deduplicate:
+            return candidates
+
+        return suppress_overlapping_candidates(candidates, iou_threshold=0.40, containment_threshold=0.65)
+
     def detect_candidates(
         self,
         transcript: Transcript,
         min_duration: Optional[float] = None,
         max_duration: Optional[float] = None,
+        deduplicate: bool = True,
     ) -> List[HighlightCandidate]:
         min_dur = min_duration or self.default_min_duration
         max_dur = max_duration or self.default_max_duration
@@ -107,8 +210,17 @@ class ContextAwareSegmenter(HighlightDetector):
 
         raw_segments = transcript.segments
         if not raw_segments:
-            # Handle empty transcript safely
-            return []
+            # BUG-08 fix: Generate duration-bounded highlight candidates even without transcript segments
+            total_dur = transcript.duration_seconds
+            if not total_dur or total_dur <= 0.0:
+                return []
+            return self._generate_candidates_from_duration(
+                video_id=transcript.video_id,
+                total_duration=total_dur,
+                min_duration=min_dur,
+                max_duration=max_dur,
+                deduplicate=deduplicate,
+            )
 
         segments = self._normalize_segments(raw_segments, max_dur)
         raw_candidates: List[HighlightCandidate] = []
@@ -148,10 +260,13 @@ class ContextAwareSegmenter(HighlightDetector):
 
             if best_window:
                 w_start, w_end, w_dur, w_parts = best_window
+                # BUG-15 fix: guarantee w_end > w_start and positive duration
+                if w_end <= w_start or w_dur <= 0.0:
+                    continue
+
                 full_text = " ".join(w_parts).strip()
                 first_sentence = w_parts[0].strip()
 
-                # Starter scorecard (refined by HighlightScorer)
                 breakdown = ScoreBreakdown(
                     hook_score=5.0,
                     moment_score=5.0,
@@ -178,5 +293,7 @@ class ContextAwareSegmenter(HighlightDetector):
                 )
                 raw_candidates.append(cand)
 
-        # Deduplicate overlapping candidates
+        if not deduplicate:
+            return raw_candidates
+
         return suppress_overlapping_candidates(raw_candidates, iou_threshold=0.40, containment_threshold=0.65)

@@ -1,8 +1,8 @@
 """
-Best-in-Class YouTube Trend Analysis & Virality Prediction Engine.
-Computes real-time View Velocity, Channel Baseline Normalization (outlier detection),
-Engagement Virality Ratios (LVR, CVR), Composite Virality Index (CVI),
-and polls official YouTube Trending Charts across regions and categories.
+YouTube Trend Analysis & Virality Prediction Engine.
+Computes real-time View Velocity, Channel Baseline Normalization,
+Engagement Virality Ratios (LVR, CVR), and Composite Virality Index (CVI).
+Separates distribution velocity from audience resonance to prevent false classification.
 """
 
 from typing import List, Dict, Optional, Any
@@ -30,6 +30,8 @@ class TrendAnalyzer:
     and audience engagement ratios.
     """
 
+    POPULATION_BASELINE_VIEWS = 10000.0  # Population median benchmark when creator history is absent
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -52,10 +54,10 @@ class TrendAnalyzer:
     ) -> TrendReport:
         """
         Computes comprehensive virality telemetry for any YouTube video.
+        Separates view velocity from audience resonance and avoids false claims.
         """
         now = datetime.now(timezone.utc)
         try:
-            # Handle ISO string with trailing Z or timezone offset
             clean_iso = published_at_iso.replace("Z", "+00:00")
             pub_time = datetime.fromisoformat(clean_iso)
             if pub_time.tzinfo is None:
@@ -67,46 +69,46 @@ class TrendAnalyzer:
         # 1. Hourly View Velocity
         velocity = float(view_count) / age_hours
 
-        # 2. Channel Baseline Normalization
-        baseline_total = creator.baseline_views if creator else 25000.0
-        # Assume standard 48-hour video maturity cycle for creator baseline
+        # 2. Channel Baseline Normalization (BUG-11 fix)
+        has_creator_history = creator is not None and creator.baseline_views > 0
+        baseline_total = creator.baseline_views if has_creator_history else self.POPULATION_BASELINE_VIEWS
         baseline_hourly_velocity = max(baseline_total / 48.0, 10.0)
         velocity_multiplier = velocity / baseline_hourly_velocity
 
-        # 3. Audience Engagement Ratios
+        # 3. Audience Engagement Ratios (BUG-12 fix)
         safe_views = max(view_count, 1)
         like_ratio = (float(like_count) / safe_views) * 100.0
         comment_ratio = (float(comment_count) / safe_views) * 100.0
 
         # 4. Composite Virality Index (CVI) 0 to 100
-        # Weights:
-        # - Velocity Multiplier vs Channel Baseline: 45% (capped at 3.0x multiplier)
-        # - Like-to-View Ratio: 30% (viral threshold benchmark = 5.0%)
-        # - Comment-to-View Ratio: 25% (viral threshold benchmark = 0.35%)
         score_velocity = min(velocity_multiplier / 3.0, 1.0) * 45.0
         score_likes = min(like_ratio / 5.0, 1.0) * 30.0
         score_comments = min(comment_ratio / 0.35, 1.0) * 25.0
         virality_index = round(min(score_velocity + score_likes + score_comments, 100.0), 1)
 
-        # 5. Outlier Classification
+        # 5. Outlier Classification and Audience Resonance Qualification
+        is_high_resonance = like_ratio >= 4.0 and (safe_views >= 500)
+        resonance_note = f" High audience resonance (LVR={like_ratio:.1f}%)." if is_high_resonance else ""
+        baseline_note = "" if has_creator_history else " (estimated from population baseline)"
+
         if velocity_multiplier >= 3.0 or virality_index >= 85.0:
             classification = "VIRAL_EXPLOSION"
             summary = (
-                f"Breakout outlier performing at {velocity_multiplier:.1f}x channel baseline. "
-                f"Velocity: {velocity:,.0f} views/hr. High audience resonance (LVR={like_ratio:.1f}%)."
+                f"Breakout outlier performing at {velocity_multiplier:.1f}x channel baseline{baseline_note}. "
+                f"Velocity: {velocity:,.0f} views/hr.{resonance_note}"
             )
         elif velocity_multiplier >= 1.8 or virality_index >= 70.0:
             classification = "TRENDING_HIGH"
             summary = (
-                f"Strong traction at {velocity_multiplier:.1f}x channel baseline. "
-                f"Velocity: {velocity:,.0f} views/hr."
+                f"Strong traction at {velocity_multiplier:.1f}x channel baseline{baseline_note}. "
+                f"Velocity: {velocity:,.0f} views/hr.{resonance_note}"
             )
         elif velocity_multiplier >= 1.2 or (velocity_multiplier >= 1.0 and virality_index >= 60.0):
             classification = "ABOVE_AVERAGE"
             summary = f"Above average momentum ({velocity_multiplier:.1f}x baseline). Steady engagement."
         elif velocity_multiplier >= 0.8:
             classification = "STEADY"
-            summary = "Consistent with normal channel baseline velocity."
+            summary = f"Consistent with normal channel baseline velocity ({velocity_multiplier:.1f}x)."
         else:
             classification = "UNDERPERFORMING"
             summary = f"Pacing below expected baseline ({velocity_multiplier:.2f}x)."
@@ -135,9 +137,7 @@ class TrendAnalyzer:
         video_id: str,
         creator: Optional[CreatorSource] = None,
     ) -> Optional[TrendReport]:
-        """
-        Fetches live video statistics via YouTube Data API v3 and evaluates virality.
-        """
+        """Fetches live video statistics via YouTube Data API v3 and evaluates virality."""
         if not self.api_key:
             return None
 
@@ -179,10 +179,7 @@ class TrendAnalyzer:
         category_id: Optional[str] = None,
         limit: int = 10,
     ) -> List[TrendReport]:
-        """
-        Queries official YouTube Trending Charts via YouTube Data API v3 (1 quota unit)
-        and ranks discovered videos by Composite Virality Index.
-        """
+        """Queries official YouTube Trending Charts via YouTube Data API v3."""
         if not self.api_key:
             return []
 
@@ -214,7 +211,6 @@ class TrendAnalyzer:
                 )
                 reports.append(report)
 
-            # Sort descending by virality index
             reports.sort(key=lambda r: r.virality_index, reverse=True)
             return reports[:limit]
         except Exception:

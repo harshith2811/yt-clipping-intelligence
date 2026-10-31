@@ -69,3 +69,7 @@ htmlcov/
 Thumbs.db
 ehthumbs.db
 desktop.ini
+
+# ML Models & Checkpoints
+models/*.pt
+models/*.onnx

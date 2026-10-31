@@ -39,8 +39,11 @@ dev = [
 ]
 
 [project.scripts]
-yt-clip = "src.yt_clipping.cli.master_cli:main"
+yt-clip = "yt_clipping.cli.master_cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src", "."]

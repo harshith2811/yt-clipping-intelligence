@@ -216,6 +216,7 @@ class HeatmapAnalyzer:
     ) -> List[HeatmapPoint]:
         """
         Synthesizes a 100-bin baseline engagement curve based on speech pacing and exclamation patterns.
+        Avoids normalizing flat signals into artificial 100% peaks.
         """
         num_bins = 100
         dur = duration_seconds or (transcript.duration_seconds if transcript else 60.0)
@@ -223,6 +224,7 @@ class HeatmapAnalyzer:
         bin_size = dur / num_bins
         bins = np.ones(num_bins, dtype=float) * 0.2  # Baseline attention level
 
+        has_features = False
         if transcript and transcript.segments:
             for seg in transcript.segments:
                 seg_mid = (seg.start + seg.end) / 2.0
@@ -231,20 +233,26 @@ class HeatmapAnalyzer:
                 wpm = len(text.split()) / max((seg.end - seg.start) / 60.0, 0.1)
 
                 boost = 0.0
-                if 130 <= wpm <= 180:  # Engaging natural speech rate
+                if 130 <= wpm <= 180:
                     boost += 0.2
                 if any(p in text for p in ["?", "!"]):
                     boost += 0.3
                 if any(kw in text.lower() for kw in ["secret", "never", "why", "insane", "truth"]):
                     boost += 0.4
 
-                bins[idx] = min(bins[idx] + boost, 1.0)
+                if boost > 0.0:
+                    bins[idx] = min(bins[idx] + boost, 1.0)
+                    has_features = True
 
-        # Apply 3-point moving average smoothing
-        smoothed = np.convolve(bins, [0.25, 0.5, 0.25], mode="same")
-        max_val = np.max(smoothed)
-        if max_val > 0:
-            smoothed = smoothed / max_val
+        # Use edge padding instead of zero padding to prevent edge droop and boundary artifacts
+        kernel = np.array([0.25, 0.5, 0.25])
+        padded = np.pad(bins, len(kernel) // 2, mode="edge")
+        smoothed = np.convolve(padded, kernel, mode="valid")
+
+        # BUG-07 fix: only scale if there is meaningful variation, do not boost flat signals to 1.0
+        val_range = float(np.max(smoothed) - np.min(smoothed))
+        if val_range > 0.10:
+            smoothed = (smoothed - np.min(smoothed)) / val_range * 0.8 + 0.2
 
         return [
             HeatmapPoint(
@@ -265,13 +273,25 @@ class HeatmapAnalyzer:
     ) -> List[HeatmapPeak]:
         """
         Applies signal smoothing and topological prominence analysis to find true retention peaks.
+        Rejects flat signals, NaNs, and infinities without manufacturing false peaks.
         """
         if len(points) < 3:
             return []
 
-        raw_values = np.array([p.value for p in points])
-        # Apply smoothing to eliminate micro-fluctuations and cubic spline artifacts
-        smoothed = np.convolve(raw_values, [0.2, 0.6, 0.2], mode="same")
+        raw_values = np.array([float(p.value) for p in points], dtype=float)
+        # Sanitize NaNs and infinities
+        raw_values = np.nan_to_num(raw_values, nan=0.0, posinf=1.0, neginf=0.0)
+
+        # BUG-07 fix: Detect flat / constant signals and return empty peaks
+        val_range = float(np.max(raw_values) - np.min(raw_values))
+        val_variance = float(np.var(raw_values))
+        if val_range < 0.03 or val_variance < 1e-4:
+            return []
+
+        # Smooth using edge padding to eliminate boundary convolution artifacts
+        kernel = np.array([0.2, 0.6, 0.2])
+        padded = np.pad(raw_values, len(kernel) // 2, mode="edge")
+        smoothed = np.convolve(padded, kernel, mode="valid")
 
         peaks: List[HeatmapPeak] = []
         n = len(smoothed)
@@ -365,39 +385,54 @@ class HeatmapAnalyzer:
         max_duration: float = 60.0,
     ) -> Tuple[float, float]:
         """
-        Snaps a peak's timestamp to the nearest surrounding sentence boundaries
-        in the Whisper transcript to guarantee a clean hook and payoff.
+        Snaps a peak's timestamp to surrounding sentence boundaries or media bounds.
+        BUG-08 fix: Strictly guarantees duration bounds regardless of transcript presence.
         """
-        ideal_start = max(center_time - (target_duration * 0.55), 0.0)
-        ideal_end = min(center_time + (target_duration * 0.45), total_duration)
+        # Adjust effective target if media is shorter than target_duration
+        effective_target = min(target_duration, total_duration)
+        effective_min = min(min_duration, total_duration)
+
+        ideal_start = max(center_time - (effective_target * 0.55), 0.0)
+        ideal_end = min(center_time + (effective_target * 0.45), total_duration)
 
         if not transcript or not transcript.segments:
-            return ideal_start, ideal_end
+            best_start = ideal_start
+            best_end = ideal_end
+        else:
+            # Search for closest sentence start before ideal_start
+            best_start = ideal_start
+            min_st_diff = float("inf")
+            for seg in transcript.segments:
+                if abs(seg.start - ideal_start) < min_st_diff and seg.start <= center_time:
+                    min_st_diff = abs(seg.start - ideal_start)
+                    best_start = seg.start
 
-        # Search for closest sentence start before ideal_start
-        best_start = ideal_start
-        min_st_diff = float("inf")
-        for seg in transcript.segments:
-            if abs(seg.start - ideal_start) < min_st_diff and seg.start <= center_time:
-                min_st_diff = abs(seg.start - ideal_start)
-                best_start = seg.start
+            # Search for closest sentence end after ideal_end
+            best_end = ideal_end
+            min_et_diff = float("inf")
+            for seg in transcript.segments:
+                if abs(seg.end - ideal_end) < min_et_diff and seg.end >= center_time:
+                    min_et_diff = abs(seg.end - ideal_end)
+                    best_end = seg.end
 
-        # Search for closest sentence end after ideal_end
-        best_end = ideal_end
-        min_et_diff = float("inf")
-        for seg in transcript.segments:
-            if abs(seg.end - ideal_end) < min_et_diff and seg.end >= center_time:
-                min_et_diff = abs(seg.end - ideal_end)
-                best_end = seg.end
-
-        # Enforce bounds
+        # Enforce universal duration constraints
         dur = best_end - best_start
-        if dur < min_duration:
-            best_end = min(best_start + target_duration, total_duration)
-        elif dur > max_duration:
+        if dur < effective_min:
+            # Expand backwards if near the end of media
+            if best_end >= total_duration:
+                best_start = max(0.0, total_duration - effective_min)
+                best_end = total_duration
+            else:
+                best_end = min(best_start + effective_min, total_duration)
+
+        dur = best_end - best_start
+        if dur > max_duration:
             best_end = min(best_start + max_duration, total_duration)
 
-        return best_start, best_end
+        best_start = max(0.0, best_start)
+        best_end = min(total_duration, max(best_start + 0.1, best_end))
+
+        return round(best_start, 2), round(best_end, 2)
 
     def render_ascii_curve(self, heatmap: HeatmapData, width: int = 50, height: int = 6) -> str:
         """

@@ -1,9 +1,9 @@
 # YouTube Clipping Intelligence Platform
 
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue?logo=python)](https://python.org)
-[![Pytest](https://img.shields.io/badge/Tests-47%20Passed-brightgreen?logo=pytest)](https://pytest.org)
+[![Pytest](https://img.shields.io/badge/Tests-68%20Passed-brightgreen?logo=pytest)](https://pytest.org)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-Hardware%20Accelerated-007808?logo=ffmpeg)](https://ffmpeg.org)
-[![NVIDIA](https://img.shields.io/badge/GPU-NVENC%20h264__nvenc-76B900?logo=nvidia)](https://developer.nvidia.com/video-codec-sdk)
+[![NVIDIA](https://img.shields.io/badge/GPU-CUDA%20%7C%20NVENC-76B900?logo=nvidia)](https://developer.nvidia.com/video-codec-sdk)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 A research-driven, modular, rights-aware video discovery, audience retention heatmap intelligence, and vertical clip production engine built for automated publishing workflows.
@@ -103,9 +103,12 @@ A research-driven, modular, rights-aware video discovery, audience retention hea
   - Fits the complete 16:9 widescreen video across the 1080px portrait width with zero edge cropping.
   - Dynamically fills upper and lower letterbox areas with a matching Gaussian-blurred (`boxblur=25:5`) backdrop.
   - Enforces square pixels (`setsar=1`, `DAR 9:16`).
-- **`crop_center`**: Direct 9:16 crop (`607.5x1080` scaled to `1080x1920` with `setsar=1`), preserving 100% natural human proportions with zero distortion.
+- **`active_speaker` (Dynamic Face-Tracking Crop)**:
+  - Samples frames across highlight candidates and detects faces using OpenCV YuNet (`cv2.FaceDetectorYN`) with Haar cascade fallback.
+  - Computes smoothed camera framing via Exponential Moving Average (EMA, $\alpha=0.20$) with scene-cut jump reset.
+- **`crop_center`**: Direct 9:16 crop (`607.5x1080` scaled to `1080x1920` with `setsar=1`), preserving natural human proportions.
 - **`split_screen`**: Dual 9:8 aspect ratio crops (`ih*9/8:ih`) stacked vertically with zero geometric stretching.
-- **NVIDIA NVENC Hardware Acceleration**: High-speed encoding via `h264_nvenc` with preset `p4` and constant quality rate control (`-cq 22`), with seamless CPU fallback to `libx264`.
+- **NVIDIA NVENC Hardware Acceleration**: High-speed encoding via `h264_nvenc` with preset `p4` and constant quality rate control (`-cq 22`), with seamless CPU fallback to `libx264` (`-pix_fmt yuv420p`).
 
 ### D. Multi-Signal Explainable Scorecard (`src/yt_clipping/scoring/scorecard.py`)
 - Evaluates candidates across independent dimensions:
@@ -247,40 +250,48 @@ yt/
 │       ├── publisher/          # Watched-folder & Webhook autopost adapters
 │       ├── qa/                 # MediaQualityVerifier (streams, aspect ratio, duration)
 │       ├── rendering/          # FFmpegRenderer (blur_bg, crop_center, split) & ASS captions
-│       ├── rights/             # LocalRightsPolicy hard gate
-│       ├── scoring/            # ExplainableScorecardScorer (Hook, Heatmap, Payoff)
-│       └── transcription/      # LocalTranscriber with Faster-Whisper integration
-└── tests/                      # Comprehensive test suite (47 tests)
+│       ├── rights/             # LocalRightsPolicy hard gate & SQLite ledger
+│       ├── scoring/            # ExplainableScorecardScorer & MetadataGenerator
+│       └── transcription/      # LocalTranscriber with Faster-Whisper GPU/CPU cascade
+└── tests/                      # Comprehensive test suite (64 tests across 20 suites)
+    ├── test_active_speaker_framer.py
     ├── test_autopost_adapter.py
     ├── test_cli_and_preview.py
     ├── test_contracts.py
+    ├── test_daemon_and_registry.py
     ├── test_deduplication.py
     ├── test_discovery_ranker.py
     ├── test_end_to_end_vertical_slice.py
     ├── test_heatmap_analysis.py
+    ├── test_metadata_generator.py
     ├── test_qa_verifier.py
+    ├── test_queue.py
+    ├── test_real_media_pipeline.py
     ├── test_rendering_and_captions.py
     ├── test_rights_gate.py
     ├── test_scoring.py
     ├── test_state_machine_recovery.py
+    ├── test_storage_manager.py
     ├── test_timestamp_math.py
-    └── test_trend_analysis.py
+    ├── test_trend_analysis.py
+    └── test_tts_and_subject_tracking.py
 ```
 
 ---
 
 ## 6. Testing & Quality Assurance
 
-Run the complete 47-test suite:
+Run the complete 68-test suite:
 ```powershell
-pytest -v tests
+pytest -v
 ```
 
 Every commit enforces:
+- Genuine container decodability and stream validation
 - 100% deterministic arithmetic on subtitle centisecond carry-overs
 - Temporal IoU suppression on overlapping candidate intervals
 - Mathematical precision in topological prominence calculations
-- Zero regression on pipeline state-machine recovery
+- Zero regression on pipeline state-machine recovery and idempotency
 
 ---
 

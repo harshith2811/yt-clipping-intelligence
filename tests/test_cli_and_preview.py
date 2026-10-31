@@ -76,3 +76,58 @@ def test_pipeline_get_candidates_blocks_unauthorized(tmp_path):
     pipeline = build_pipeline(ledger_path=str(ledger_file))
     with pytest.raises(RightsPolicyViolationError):
         pipeline.get_candidates("unregistered_vid")
+
+
+def test_cli_doctor_and_config(tmp_path, capsys):
+    from src.yt_clipping.cli.master_cli import cmd_doctor, cmd_config_validate, cmd_quota
+    db_file = str(tmp_path / "jobs.db")
+    
+    # Test doctor
+    args_doc = argparse.Namespace(db=db_file)
+    cmd_doctor(args_doc)
+    captured = capsys.readouterr()
+    assert "Environment Doctor" in captured.out
+    assert "Python Version" in captured.out
+
+    # Test config validate
+    args_cfg = argparse.Namespace()
+    cmd_config_validate(args_cfg)
+    captured_cfg = capsys.readouterr()
+    assert "Active Configuration" in captured_cfg.out
+
+    # Test quota
+    args_quota = argparse.Namespace(db=db_file)
+    cmd_quota(args_quota)
+    captured_q = capsys.readouterr()
+    assert "Quota Governor Status" in captured_q.out
+
+
+def test_cli_channels_and_queue(tmp_path, capsys):
+    from src.yt_clipping.cli.master_cli import cmd_channels, cmd_queue
+    db_file = str(tmp_path / "jobs.db")
+
+    # Add channel
+    args_add = argparse.Namespace(
+        channel_cmd="add",
+        channel_id="UC_CLI_TEST",
+        name="CLI Test Channel",
+        handle="@cli_test",
+        url="https://youtube.com/@cli_test",
+        baseline=12000.0,
+        db=db_file,
+    )
+    cmd_channels(args_add)
+    cap = capsys.readouterr()
+    assert "Added/Updated monitored channel" in cap.out
+
+    # List channels
+    args_list = argparse.Namespace(channel_cmd="list", all=False, db=db_file)
+    cmd_channels(args_list)
+    cap_list = capsys.readouterr()
+    assert "CLI Test Channel" in cap_list.out
+
+    # Queue status
+    args_q = argparse.Namespace(queue_cmd="status", db=db_file)
+    cmd_queue(args_q)
+    cap_q = capsys.readouterr()
+    assert "Job Queue Status" in cap_q.out

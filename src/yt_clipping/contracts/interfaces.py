@@ -23,6 +23,16 @@ class RightsPolicyViolationError(Exception):
     pass
 
 
+class TranscriptionError(RuntimeError):
+    """Raised when transcription fails across all cascade providers."""
+    pass
+
+
+class RenderingError(RuntimeError):
+    """Raised when video rendering via FFmpeg fails."""
+    pass
+
+
 class DiscoveryProvider(ABC):
     """Fetches compliant, public video metadata and channel lists."""
 
