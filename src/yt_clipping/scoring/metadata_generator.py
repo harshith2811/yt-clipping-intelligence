@@ -41,8 +41,8 @@ class MetadataGenerator:
         self,
         llm_api_base: Optional[str] = None,
         llm_api_key: Optional[str] = None,
-        model: str = "llama3",
-        timeout: int = 5,
+        model: str = "llama3.2:1b",
+        timeout: int = 25,
     ):
         self.llm_api_base = (llm_api_base or "").rstrip("/")
         self.llm_api_key = llm_api_key
@@ -110,8 +110,9 @@ class MetadataGenerator:
                 "model": self.model,
                 "prompt": prompt,
                 "stream": False,
-                "format": "json",
             }
+            if "r1" not in self.model.lower():
+                payload["format"] = "json"
 
         req = urllib.request.Request(
             endpoint,
