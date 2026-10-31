@@ -422,18 +422,26 @@ class ClippingPipeline:
             )
         transcript = self.transcriber.load_from_cache(video_id)
         if not transcript:
-            asset_path = self.asset_provider.resolve_asset(video_id, manifest)
+            try:
+                asset_path = self.asset_provider.resolve_asset(video_id, manifest)
+            except FileNotFoundError:
+                asset_path = self.asset_provider.download_asset(video_id, manifest)
             transcript = self.transcriber.transcribe(asset_path, video_id)
-        candidates = self.detector.detect_candidates(transcript)
+
         heatmap_data = None
         try:
             heatmap_data = self.heatmap_analyzer.extract_heatmap(
                 video_id=video_id,
-                duration_seconds=transcript.duration_seconds,
+                duration_seconds=transcript.duration_seconds if transcript else 0.0,
                 transcript=transcript,
             )
         except Exception:
             pass
+
+        try:
+            candidates = self.detector.detect_candidates(transcript, heatmap=heatmap_data)
+        except TypeError:
+            candidates = self.detector.detect_candidates(transcript)
         scored = [self.scorer.score_candidate(c, transcript, heatmap=heatmap_data) for c in candidates]
         scored.sort(key=lambda c: c.score, reverse=True)
         # BUG-10 fix: Suppress overlapping candidates on scored candidates
