@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  # Autonomous Background Pinger Daemon Service
+  pinger-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yt-clipping-pinger
+    restart: unless-stopped
+    command: ["python", "pinger_daemon.py", "--interval", "300", "--websub", "--websub-port", "8088"]
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      - DEFAULT_LAYOUT_MODE=blur_background
+      - DEFAULT_SUBTITLE_PRESET=hormozi
+
+  # One-shot Pipeline Runner / Worker
+  pipeline-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yt-clipping-worker
+    profiles: ["tools"]
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
