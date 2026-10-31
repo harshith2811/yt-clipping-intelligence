@@ -1,12 +1,26 @@
 # YouTube Clipping Intelligence Platform
 
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue?logo=python)](https://python.org)
-[![Pytest](https://img.shields.io/badge/Tests-68%20Passed-brightgreen?logo=pytest)](https://pytest.org)
+[![Pytest](https://img.shields.io/badge/Tests-84%20Passed%20(100%25)-brightgreen?logo=pytest)](https://pytest.org)
+[![Zero Quota](https://img.shields.io/badge/YouTube%20Discovery-Zero%20API%20Quota-red?logo=youtube)](docs/VIRALITY_AND_ATTRIBUTION.md)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-Hardware%20Accelerated-007808?logo=ffmpeg)](https://ffmpeg.org)
 [![NVIDIA](https://img.shields.io/badge/GPU-CUDA%20%7C%20NVENC-76B900?logo=nvidia)](https://developer.nvidia.com/video-codec-sdk)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-A research-driven, modular, rights-aware video discovery, audience retention heatmap intelligence, and vertical clip production engine built for automated publishing workflows.
+An enterprise-grade, research-driven autonomous video discovery, audience retention intelligence, and vertical 9:16 clip production engine. Designed for automated multi-platform publishing workflows across YouTube Shorts, TikTok, and Instagram Reels.
+
+---
+
+## 📖 Table of Contents
+- [1. System Architecture](#1-system-architecture)
+- [2. Key Capabilities & Innovations](#2-key-capabilities--innovations)
+- [3. Quickstart & Installation](#3-quickstart--installation)
+- [4. CLI Operator Guide](#4-cli-operator-guide)
+- [5. Subtitle Presets & Video Layouts](#5-subtitle-presets--video-layouts)
+- [6. Project Directory Structure](#6-project-directory-structure)
+- [7. Testing & Quality Assurance](#7-testing--quality-assurance)
+- [8. Documentation & Technical Specifications](#8-documentation--technical-specifications)
+- [9. License & Attribution](#9-license--attribution)
 
 ---
 
@@ -18,14 +32,14 @@ A research-driven, modular, rights-aware video discovery, audience retention hea
             ┌─────────────────────────────┼─────────────────────────────┐
             ▼                             ▼                             ▼
   [ Creator RSS Feeds ]        [ YouTube Data API v3 ]      [ yt-dlp Video / Audio ]
-   (Quota-free Polling)       (Trending Charts, Comments)      (1080p60 Source Ingest)
+   (Zero-Quota Polling)       (Trending Charts, Comments)      (1080p60 Source Ingest)
             │                             │                             │
             ▼                             ▼                             │
   ┌───────────────────┐         ┌───────────────────┐                   │
-  │   TrendAnalyzer   │         │  HeatmapAnalyzer  │                   │
-  │ View Velocity (V) │         │ 100-Point Replay  │                   │
-  │ Baseline Multi (M)│         │ Prominence Peaks  │                   │
-  │ Virality Index    │         │ Sentence Snapping │                   │
+  │   PingerDaemon    │         │  HeatmapAnalyzer  │                   │
+  │  Hourly Velocity  │         │ 100-Point Replay  │                   │
+  │  Baseline Multi   │         │ Prominence Peaks  │                   │
+  │  Resonance Gate   │         │ Sentence Snapping │                   │
   └─────────┬─────────┘         └─────────┬─────────┘                   │
             │                             │                             │
             └──────────────────────┬──────┘                             │
@@ -57,9 +71,16 @@ A research-driven, modular, rights-aware video discovery, audience retention hea
                                    │ Ranked Highlight                   │
                                    ▼                                    │
                         ┌─────────────────────┐                         │
+                        │ ActiveSpeakerFramer │                         │
+                        │ (YuNet Face Tracker)│                         │
+                        └──────────┬──────────┘                         │
+                                   │ Smoothed 9:16 Coordinates          │
+                                   ▼                                    │
+                        ┌─────────────────────┐                         │
                         │   FFmpeg Renderer   │ ◄───────────────────────┘
                         │  blur_background    │
-                        │  crop_center        │
+                        │  active_speaker     │
+                        │  Animated Subtitles │
                         │  NVIDIA NVENC GPU   │
                         └──────────┬──────────┘
                                    │ Rendered 1080x1920 MP4
@@ -80,79 +101,65 @@ A research-driven, modular, rights-aware video discovery, audience retention hea
 
 ---
 
-## 2. Core Modules & Innovations
+## 2. Key Capabilities & Innovations
 
-### A. Audience Retention Heatmap Intelligence (`src/yt_clipping/discovery/heatmap.py`)
-- **Tiered Telemetry Ingestion**:
-  1. *Primary*: Extracts YouTube's raw 100-segment `heatmap` array directly from player response metadata.
-  2. *Fallback 1 (Comment Timestamp Mining)*: If heatmaps are unavailable (new uploads, livestreams, or 429 rate limits), queries YouTube Data API v3 `commentThreads.list`, extracts timestamp tokens (`12:34`), weights them by comment likes, and applies Gaussian Kernel Density Estimation (KDE) to reconstruct crowd-sourced retention curves.
-  3. *Fallback 2 (Speech & Cadence Curve)*: Synthesizes a baseline engagement curve from speech cadence (140–180 WPM) and exclamation patterns.
-- **Topological Prominence Peak Detection**: Walks left/right to find surrounding baseline valleys, eliminating flat plateau false positives ($P_i = y_i - \max(m_{\text{left}}, m_{\text{right}})$).
-- **Sentence Boundary Snapping**: Aligns peak windows to natural speech start and punchline endings (25s–55s target).
-- **Terminal ASCII Sparklines**: Renders instant terminal waveforms for CLI operators.
+### A. Autonomous Zero-Quota Pinger & Scraper Daemon ([`docs/VIRALITY_AND_ATTRIBUTION.md`](docs/VIRALITY_AND_ATTRIBUTION.md))
+- **Zero API Quota Depletion:** Monitors creator channels using public XML Atom feeds (`/feeds/videos.xml?channel_id={id}`) with HTTP conditional GET (`ETag` and `If-Modified-Since` 304 caching).
+- **WebSub Push Notifications:** Embedded W3C WebSub HTTP push listener receiving sub-second upload alerts directly from YouTube hubs.
+- **Early-Hour Velocity Multiplier ($M_v$):**
+  $$V_{\text{hourly}} = \frac{\text{Current Views}}{\max(\text{Age in Hours}, 0.25)}, \quad M_v = \frac{V_{\text{hourly}}}{\max(\text{Baseline}/48.0, 10.0)}$$
+- **Audience Resonance Gate:** Rejects clickbait and bot views by enforcing Like-to-View Ratio (LVR $\ge 1.2\%$) and Comment-to-View Ratio (CVR $\ge 0.03\%$).
 
-### B. Macro Trend & Virality Engine (`src/yt_clipping/discovery/trend_analyzer.py`)
-- **Hourly View Velocity**: $V = \frac{\Delta\text{Views}}{\Delta\text{Hours}}$.
-- **Channel Baseline Normalization ($M$)**: Compares velocity against the creator's historical 30-day baseline ($M = V / V_{\text{baseline}}$).
-- **Audience Resonance Ratios**: Like-to-View Ratio (LVR) and Comment-to-View Ratio (CVR).
-- **Composite Virality Index (CVI)**: Calibrated 0–100 index predicting breakout viral potential.
-- **YouTube Trending Chart Ingestion**: Polls official trending charts across regions and categories using 1 API quota unit.
+### B. Creator Attribution & Legal Compliance Engine
+- **Automated Caption Attribution:** Generates platform-compliant primary credit (`Original Content by: @handle`), canonical source links (`https://youtu.be/...`), and educational fair-use disclosures.
+- **Sponsor & Ad Copy Purge:** Detects and removes paid sponsor endorsements (NordVPN, Displate, BetterHelp, AG1) from transcripts and descriptions.
+- **Creator Rights Governance:** Manages licensing policies (`OPEN_AFFILIATE`, `CREATIVE_COMMONS`, `PARTNER_PROGRAM`, `STRICT_COPYRIGHT`) and quarantines strict copyright holders.
 
-### C. Hardware-Accelerated 9:16 Video Rendering (`src/yt_clipping/rendering/renderer.py`)
-- **`blur_background` (Default & Industry Standard - OpusClip/TikTok style)**:
-  - Fits the complete 16:9 widescreen video across the 1080px portrait width with zero edge cropping.
-  - Dynamically fills upper and lower letterbox areas with a matching Gaussian-blurred (`boxblur=25:5`) backdrop.
-  - Enforces square pixels (`setsar=1`, `DAR 9:16`).
-- **`active_speaker` (Dynamic Face-Tracking Crop)**:
-  - Samples frames across highlight candidates and detects faces using OpenCV YuNet (`cv2.FaceDetectorYN`) with Haar cascade fallback.
-  - Computes smoothed camera framing via Exponential Moving Average (EMA, $\alpha=0.20$) with scene-cut jump reset.
-- **`crop_center`**: Direct 9:16 crop (`607.5x1080` scaled to `1080x1920` with `setsar=1`), preserving natural human proportions.
-- **`split_screen`**: Dual 9:8 aspect ratio crops (`ih*9/8:ih`) stacked vertically with zero geometric stretching.
-- **NVIDIA NVENC Hardware Acceleration**: High-speed encoding via `h264_nvenc` with preset `p4` and constant quality rate control (`-cq 22`), with seamless CPU fallback to `libx264` (`-pix_fmt yuv420p`).
+### C. AI Active Speaker Face Tracking ([`docs/ACTIVE_SPEAKER_AND_CAPTIONS.md`](docs/ACTIVE_SPEAKER_AND_CAPTIONS.md))
+- **Deep CNN Face Detection:** OpenCV YuNet with Haar cascade fallback dynamically centers subjects in vertical 9:16 portrait video.
+- **Exponential Moving Average (EMA, $\alpha=0.20$):** Smooths natural body motion while instantly resetting on camera angle cuts to prevent drifting.
 
-### D. Multi-Signal Explainable Scorecard (`src/yt_clipping/scoring/scorecard.py`)
-- Evaluates candidates across independent dimensions:
-  - **Opening Hook (25%)**: First 3–5 seconds question/curiosity capture.
-  - **Heatmap Replay Peak (25%)**: Alignment with crowd-sourced "Most Replayed" peaks.
-  - **Moment Payoff (20%)**: Core insight, climax, or punchline.
-  - **Standalone Coherence (15%)**: Self-contained thought without dangling pronouns or connectors.
-  - **Cadence & Pacing (10%)**: Optimal short-form rate (135–185 WPM).
-  - **Audio Energy (5%)**: Acoustic inflection and volume dynamics.
+### D. Audience Retention Heatmap Intelligence ([`src/yt_clipping/discovery/heatmap.py`](src/yt_clipping/discovery/heatmap.py))
+- **Tiered Telemetry Ingestion:** Extracts raw 100-segment YouTube replay curves, with fallback to comment-timestamp Gaussian Kernel Density Estimation (KDE).
+- **Topological Prominence Peak Detection:** Eliminates flat plateau false positives by walking valley boundaries ($P_i = y_i - \max(m_{\text{left}}, m_{\text{right}})$).
 
-### E. Hard RightsGate & Checkpoint Recovery (`src/yt_clipping/rights/`, `src/yt_clipping/orchestration/`)
-- **Strict Rights Verification**: Blocks downloading or rendering unless an asset has a verified rights basis (`OWNED`, `EXPLICIT_PERMISSION`, `CREATIVE_COMMONS`, `OPERATOR_ASSET`).
-- **SQLite WAL Checkpointing**: Resilient state machine preserves pipeline checkpoints (`RIGHTS_CHECKED`, `ASSET_INGESTED`, `TRANSCRIBED`, `SEGMENTED`, `SCORED`, `REVIEWED`, `RENDERED`, `QA_VERIFIED`, `HANDED_OFF`).
+### E. Hardware-Accelerated 9:16 Video Rendering ([`src/yt_clipping/rendering/renderer.py`](src/yt_clipping/rendering/renderer.py))
+- **Layouts:** `blur_background` (OpusClip/TikTok style), `active_speaker` (dynamic face tracking), `crop_center`, and `split_screen` (podcasts).
+- **GPU Acceleration:** NVIDIA NVENC (`h264_nvenc`) with constant quality rate control (`-cq 22`), seamlessly falling back to CPU `libx264`.
 
 ---
 
-## 3. Installation & Setup
+## 3. Quickstart & Installation
 
 ### Prerequisites
 - **Python 3.10+** (Tested on Python 3.12)
-- **FFmpeg & ffprobe** (Must be on system PATH)
-- **NVIDIA GPU** with updated drivers (optional, for hardware NVENC encoding)
+- **FFmpeg & ffprobe** on system PATH
 
-### 1. Clone & Set Up Virtual Environment
-```powershell
-git clone <YOUR_REPO_URL>
-cd yt
+### Installation
+```bash
+# 1. Clone repository
+git clone https://github.com/your-org/yt-clipping-intelligence.git
+cd yt-clipping-intelligence
+
+# 2. Set up virtual environment
 python -m venv .venv
+# Windows:
 .venv\Scripts\Activate.ps1
+# Linux / macOS:
+source .venv/bin/activate
+
+# 3. Install dependencies
 pip install -r requirements.txt
+pip install -e .
 ```
 
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env`:
-```powershell
-Copy-Item .env.example .env
+### Environment Configuration
+```bash
+cp .env.example .env
 ```
-Populate `.env` with your API keys:
+Edit `.env` to configure your API keys (optional for zero-quota RSS polling):
 ```dotenv
-# YouTube Data API v3 Configuration
 YOUTUBE_API_KEY=AIzaSy...YourKeyHere
-YOUTUBE_DAILY_QUOTA_LIMIT=10000
-
-# Media Processing Defaults
 DEFAULT_LAYOUT_MODE=blur_background
 CRF_QUALITY=22
 AUTO_APPROVE_THRESHOLD=65.0
@@ -160,100 +167,107 @@ AUTO_APPROVE_THRESHOLD=65.0
 
 ---
 
-## 4. CLI Command Reference
+## 4. CLI Operator Guide
 
-The platform provides an operational CLI via `python -m src.yt_clipping` or the console script `yt-clip`:
+Detailed instructions are available in [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md).
 
-### 1. End-to-End Pipeline Run (GPU Accelerated)
-Process an authorized video, score highlights, render 9:16 clip, and hand off to autopost:
-```powershell
-python -m src.yt_clipping run --video-id wS64_n65u3k --gpu --layout blur_background
-```
-*Options:*
-- `--layout`: `blur_background` (default), `crop_center`, or `split_screen`
-- `--gpu`: Enables NVIDIA NVENC (`h264_nvenc`) hardware acceleration
-- `--dry-run` / `--no-dry-run`: Toggle live autopost handoff vs simulation
+### 1. Monitor Channels & Detect New Uploads
+```bash
+# Add creators by handle or channel ID
+python channel_watcher.py add @hubermanlab --baseline 150000 --policy OPEN_AFFILIATE
+python channel_watcher.py add @GoogleDevelopers --baseline 20000 --policy OPEN_AFFILIATE
 
-### 2. Audience Retention Heatmap & ASCII Waveform
-Extract the crowd-sourced "Most Replayed" curve and identify viral peaks:
-```powershell
-python -m src.yt_clipping heatmap --video-id wS64_n65u3k --visual
-```
-*Output Preview:*
-```text
-[OK] Heatmap Ingestion Source: COMMENT_DENSITY (100 points)
-Global Peak (#1 Most Replayed): 190.5s (03:10) | Intensity: 84.3%, Prominence: 84.3%
-Recommended Clip Window: 171.2s -> 206.2s (35.0s duration)
+# List tracked creators
+python channel_watcher.py list
 
-Viewer Replay Retention Waveform [COMMENT_DENSITY] (Duration: 300s):
-  ^ 100% |  ==                           ==                 |
-  v   0%  00:00                 02:30                 05:00
-
-Prominent Replay Peaks:
-  #1 [GLOBAL_MAXIMA] 03:10 | Intensity: 84.3%, Prominence: 84.3%, Suggested: 171.2s - 206.2s (35.0s)
-  #2 [SPIKE_PAYOFF] 00:16 | Intensity: 71.8%, Prominence: 71.8%, Suggested: 0.0s - 32.2s (32.2s)
+# Run immediate live zero-quota discovery sweep
+python channel_watcher.py scan
 ```
 
-### 3. Live YouTube Trending Charts & Video Virality
-Query YouTube's real-time trending chart and rank videos by Virality Index:
-```powershell
-python -m src.yt_clipping trends --chart popular --region US --limit 5
-```
-Evaluate any single video's virality velocity:
-```powershell
-python -m src.yt_clipping trends --video-id wS64_n65u3k
+### 2. Run Autonomous Background Pinger Daemon
+```bash
+# Run continuous polling daemon (checks every 5 minutes)
+python pinger_daemon.py --interval 300
+
+# Run single sweep for cron execution
+python pinger_daemon.py --cycles 1
 ```
 
-### 4. Highlight Candidate Preview (No Render)
-Preview candidate moments and explainable scorecards without rendering:
-```powershell
-python -m src.yt_clipping preview --video-id wS64_n65u3k
-```
+### 3. Render 9:16 Vertical Video (Master CLI)
+```bash
+# Full pipeline run with Active Speaker face tracking & animated Hormozi subtitles
+yt-clip run --video-id rsOiZE19RVo --layout active_speaker --preset hormozi --gpu
 
-### 5. Content Rights Management
-Register and verify operator rights in the audit ledger:
-```powershell
-python -m src.yt_clipping rights register --video-id wS64_n65u3k --basis OPERATOR_ASSET --owner "Browney" --proof "AGREEMENT-001"
-python -m src.yt_clipping rights check --video-id wS64_n65u3k
-```
+# Fast preview candidate highlights without rendering
+yt-clip preview --video-id rsOiZE19RVo
 
-### 6. Pipeline Job Audit & Checkpoint History
-Inspect active and completed jobs in the SQLite WAL journal:
-```powershell
-python -m src.yt_clipping jobs --status SUCCEEDED
+# Visualize crowd-sourced retention replay curve
+yt-clip heatmap --video-id rsOiZE19RVo --visual
 ```
 
 ---
 
-## 5. Directory Structure
+## 5. Subtitle Presets & Video Layouts
+
+### Subtitle Styles ([`docs/ACTIVE_SPEAKER_AND_CAPTIONS.md`](docs/ACTIVE_SPEAKER_AND_CAPTIONS.md))
+- **`hormozi`** *(Default)*: Bold yellow uppercase text with heavy black borders and pop active-word highlights.
+- **`beast_bounce`**: High-contrast lime green with subtle active word bounce.
+- **`neon_cyber`**: Cyan glow with magenta drop shadow.
+- **`karaoke_gold`**: Elegant golden progressive fill for podcast narratives.
+- **`bold_social`**: Clean, high-legibility minimalist white with dark shadow.
+
+### Video Layouts
+| Layout Mode | Description |
+| :--- | :--- |
+| `blur_background` | Fits complete 16:9 widescreen frame with a matching Gaussian-blurred backdrop. Zero cropping. |
+| `active_speaker` | YuNet face tracking centers the speaker smoothly across the 9:16 vertical viewport. |
+| `crop_center` | Proportional 9:16 center crop (`607.5x1080` scaled to `1080x1920`). |
+| `split_screen` | Dual 9:8 vertical stack for multi-guest podcast conversations. |
+
+---
+
+## 6. Project Directory Structure
 
 ```text
-yt/
-├── .env.example                # Configuration template
-├── .gitignore                  # Production Git ignore rules
-├── pyproject.toml              # Modern build & packaging spec
-├── pytest.ini                  # Test suite runner configuration
-├── requirements.txt            # Pinned dependencies
-├── README.md                   # Platform documentation
-├── THIRD_PARTY_NOTICES.md      # Upstream attribution & provenance
-├── docs/                       # Architecture Decision Records (ADRs) & research
-│   ├── adr/                    # Architecture Decision Records
-│   └── research/               # Benchmarks, provenance, and research logs
-├── src/
-│   └── yt_clipping/
-│       ├── cli/                # Master CLI commands & argument parser
-│       ├── contracts/          # Data contracts, dataclasses, and interfaces
-│       ├── detection/          # Sentence-aligned candidate segmentation & IoU dedupe
-│       ├── discovery/          # TrendAnalyzer, HeatmapAnalyzer, ChannelMonitor, Ranker
-│       ├── ingestion/          # Local media asset resolution & probing
-│       ├── orchestration/      # Pipeline coordinator, state machine & SQLite journal
-│       ├── publisher/          # Watched-folder & Webhook autopost adapters
-│       ├── qa/                 # MediaQualityVerifier (streams, aspect ratio, duration)
-│       ├── rendering/          # FFmpegRenderer (blur_bg, crop_center, split) & ASS captions
-│       ├── rights/             # LocalRightsPolicy hard gate & SQLite ledger
-│       ├── scoring/            # ExplainableScorecardScorer & MetadataGenerator
-│       └── transcription/      # LocalTranscriber with Faster-Whisper GPU/CPU cascade
-└── tests/                      # Comprehensive test suite (64 tests across 20 suites)
+yt-clipping-intelligence/
+├── .env.example                    # Environment variable template
+├── .gitignore                      # Git ignore rules for media, databases, caches
+├── pyproject.toml                  # Packaging specification & CLI entrypoints
+├── pytest.ini                      # Pytest runner configuration
+├── requirements.txt                # Pinned production dependencies
+├── LICENSE                         # MIT License
+├── README.md                       # Platform documentation
+├── THIRD_PARTY_NOTICES.md          # Upstream research attribution
+│
+├── channel_watcher.py              # CLI: Creator registry & live scan sweeps
+├── pinger_daemon.py                # Daemon: Autonomous RSS & WebSub pinger
+├── trend_scorer.py                 # Engine: Virality velocity & resonance scorer
+├── attribution_engine.py           # Engine: Creator attribution & sponsor purge
+│
+├── docs/                           # Architecture, CLI guides, and research
+│   ├── ARCHITECTURE.md             # High-level architecture & SQLite schema
+│   ├── CLI_REFERENCE.md            # Complete CLI operator handbook
+│   ├── VIRALITY_AND_ATTRIBUTION.md # Virality math, resonance gate, and policies
+│   ├── ACTIVE_SPEAKER_AND_CAPTIONS.md # Face tracking & ASS subtitle engine
+│   ├── adr/                        # Architecture Decision Records (ADRs)
+│   └── research/                   # Provenance logs & master research briefs
+│
+├── src/yt_clipping/                # Core modular Python package
+│   ├── audio/                      # Edge-TTS voice generation & audio mastering
+│   ├── cli/                        # Master CLI (`yt-clip`) entrypoints
+│   ├── contracts/                  # Data models, dataclasses, and interfaces
+│   ├── detection/                  # Sentence snapping & IoU deduplication
+│   ├── discovery/                  # Pinger, TrendScorer, Heatmap, Attribution
+│   ├── ingestion/                  # Asset ingestion & ffprobe container analysis
+│   ├── orchestration/              # State machine, JobQueue, and SQLite WAL ledger
+│   ├── publisher/                  # Autopost webhook & watched-folder adapters
+│   ├── qa/                         # Stream decodability & SAR 1:1 validation
+│   ├── rendering/                  # FFmpegRenderer, ActiveSpeakerFramer, Captions
+│   ├── rights/                     # Hard RightsPolicyGate & license audit ledger
+│   ├── scoring/                    # ExplainableScorecardScorer & Hook Analyzer
+│   └── transcription/              # LocalTranscriber with Faster-Whisper
+│
+└── tests/                          # Comprehensive Pytest Suite (84 tests)
     ├── test_active_speaker_framer.py
     ├── test_autopost_adapter.py
     ├── test_cli_and_preview.py
@@ -264,6 +278,7 @@ yt/
     ├── test_end_to_end_vertical_slice.py
     ├── test_heatmap_analysis.py
     ├── test_metadata_generator.py
+    ├── test_pinger_and_virality_scraper.py
     ├── test_qa_verifier.py
     ├── test_queue.py
     ├── test_real_media_pipeline.py
@@ -279,23 +294,35 @@ yt/
 
 ---
 
-## 6. Testing & Quality Assurance
+## 7. Testing & Quality Assurance
 
-Run the complete 68-test suite:
-```powershell
+Run the complete 84-test test suite:
+```bash
 pytest -v
 ```
 
-Every commit enforces:
-- Genuine container decodability and stream validation
-- 100% deterministic arithmetic on subtitle centisecond carry-overs
-- Temporal IoU suppression on overlapping candidate intervals
-- Mathematical precision in topological prominence calculations
-- Zero regression on pipeline state-machine recovery and idempotency
+All 84 tests pass with a 100% pass rate:
+- ✅ **Decodability & Quality Assurance:** Stream container decodability, SAR 1:1, and DAR 9:16.
+- ✅ **Timestamp Arithmetic:** 100% deterministic ASS centisecond carry calculations.
+- ✅ **Temporal IoU Suppression:** Rejection of overlapping highlight candidates.
+- ✅ **Zero-Quota Polling:** Atom XML feed parsing and HTTP 304 ETag caching.
+- ✅ **Velocity Multipliers:** Statistical early-hour view velocity and classification math.
+- ✅ **Attribution & Compliance:** Creator rights governance and sponsor ad copy purging.
+- ✅ **State Machine Resilience:** SQLite WAL crash recovery and idempotency locks.
 
 ---
 
-## 7. License & Compliance
+## 8. Documentation & Technical Specifications
+- [**System Architecture & Schema**](docs/ARCHITECTURE.md)
+- [**CLI Operator Reference Guide**](docs/CLI_REFERENCE.md)
+- [**Virality Scorer, Early-Hour Velocity & Attribution**](docs/VIRALITY_AND_ATTRIBUTION.md)
+- [**Active Speaker Face Tracking & Subtitles**](docs/ACTIVE_SPEAKER_AND_CAPTIONS.md)
+- [**Architecture Decision Records (ADRs)**](docs/adr/)
+- [**Upstream Research & Provenance**](docs/research/)
 
-Distributed under the **MIT License**. See `LICENSE` for details.
-All external algorithms, inspiration sources, and upstream research references are documented in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+---
+
+## 9. License & Attribution
+
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for terms.
+All upstream algorithm inspirations, research foundations, and external references are formally credited in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

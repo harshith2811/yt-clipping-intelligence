@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "yt-clipping-intelligence"
 version = "1.0.0"
-description = "Research-driven, rights-aware YouTube highlight discovery, heatmap intelligence, and vertical clip production engine."
+description = "Research-driven, rights-aware YouTube highlight discovery, heatmap intelligence, virality pinger, and vertical clip production engine."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -40,6 +40,8 @@ dev = [
 
 [project.scripts]
 yt-clip = "yt_clipping.cli.master_cli:main"
+channel-watcher = "yt_clipping.discovery.channel_watcher:main"
+pinger-daemon = "yt_clipping.discovery.pinger_daemon:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
