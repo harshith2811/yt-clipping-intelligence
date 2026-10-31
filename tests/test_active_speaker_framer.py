@@ -63,3 +63,46 @@ def test_active_speaker_renderer_filtergraph():
     assert custom_crop in vf
     assert "scale=1080:1920" in vf
     assert "subtitles='subs.ass'" in vf
+
+
+def test_subject_aware_multi_subject_detection(tmp_path):
+    framer = FaceFocusedFramer(sample_fps=2.0)
+    video_path = str(tmp_path / "multi_subject.mp4")
+
+    # Create synthetic video with two distinct persons on left (x=150) and right (x=1100)
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter(video_path, fourcc, 10.0, (1280, 720))
+    for _ in range(15):
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        # Person 1 (left)
+        cv2.rectangle(frame, (100, 200), (300, 680), (180, 180, 180), -1)
+        # Person 2 (right)
+        cv2.rectangle(frame, (980, 200), (1180, 680), (180, 180, 180), -1)
+        out.write(frame)
+    out.release()
+
+    res = framer.analyze_crop_window(video_path, start_seconds=0.0, duration_seconds=1.5)
+    assert "recommended_layout" in res
+    assert "is_multi_subject" in res
+    assert "subject_detected_ratio" in res
+
+
+def test_dynamic_camera_cut_expression(tmp_path):
+    framer = FaceFocusedFramer(sample_fps=3.0, scene_jump_threshold=0.20)
+    video_path = str(tmp_path / "camera_cut.mp4")
+
+    # Create video where subject starts on far left (x=150) for 1s, then camera cuts to far right (x=1050)
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter(video_path, fourcc, 10.0, (1280, 720))
+    for i in range(20):
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        center_x = 150 if i < 10 else 1050
+        cv2.circle(frame, (center_x, 360), 80, (255, 255, 255), -1)
+        out.write(frame)
+    out.release()
+
+    res = framer.analyze_crop_window(video_path, start_seconds=0.0, duration_seconds=2.0)
+    assert "crop_w" in res
+    assert "crop_h" in res
+    assert "ffmpeg_crop_filter" in res
+
