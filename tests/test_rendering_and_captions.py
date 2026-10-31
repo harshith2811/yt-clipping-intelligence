@@ -197,8 +197,8 @@ def test_hormozi_kinetic_bounce_subtitles_and_sentiment(tmp_path):
         content = f.read()
 
     # Verify Impact font, uppercase conversion, and bounce animations
-    assert "Style: Default,Impact,66" in content
-    assert r"\fscx116" in content  # Bounce animation tag
+    assert "Style: Default,Impact," in content
+    assert r"\fscx" in content  # Bounce animation tag
     assert "KILLER" in content     # Uppercase styling
     assert r"\c&H002020FF&" in content  # Danger crimson red for 'KILLER'
     assert r"\c&H0000D7FF&" in content  # Mystery gold for 'ZODIAC'

@@ -36,18 +36,18 @@ def escape_ass_text(text: str) -> str:
 DANGER_KEYWORDS = {
     "KILLER", "KILLING", "MURDER", "MURDERER", "MURDERING", "DEAD", "DEATH",
     "DIED", "BOMB", "THREAT", "BLOOD", "VICTIM", "VICTIMS", "ATTACK", "ATTACKED",
-    "GUN", "SHOOT", "SHOT", "STRIKES", "EXECUTIONER", "CRIME", "TERROR"
+    "GUN", "SHOOT", "SHOT", "STRIKES", "EXECUTIONER", "CRIME", "TERROR", "WARNING", "POLICE"
 }
 
 MYSTERY_KEYWORDS = {
     "ZODIAC", "CIPHER", "SECRET", "SECRETS", "CODE", "CODES", "PUZZLE",
     "DECODE", "DECODED", "DECODING", "HIDDEN", "UNKNOWN", "INFAMOUS",
-    "MYSTERIOUS", "MYSTERY", "CLUE", "CLUES", "EVIDENCE", "LETTERS"
+    "MYSTERIOUS", "MYSTERY", "CLUE", "CLUES", "EVIDENCE", "LETTERS", "ENVELOPE", "INTERRUPTED"
 }
 
 METRIC_KEYWORDS = {
     "FIRST", "MILLION", "THOUSAND", "THOUSANDS", "HUNDRED", "HUNDREDS",
-    "ALONE", "NEVER", "ALWAYS", "FOREVER", "CRITICAL", "MASSIVE", "URGENT"
+    "ALONE", "NEVER", "ALWAYS", "FOREVER", "CRITICAL", "MASSIVE", "URGENT", "RUSH", "SUDDENLY"
 }
 
 EMOJI_KEYWORDS = {
@@ -82,16 +82,16 @@ class SubtitleGenerator:
     STYLE_PRESETS: Dict[str, Dict[str, Any]] = {
         "hormozi": {
             "font_name": "Impact",
-            "font_size": 66,
+            "font_size": 72,
             "primary_color": "&H00FFFFFF",     # Crisp White text
             "secondary_color": "&H0000FFFF",   # Neon Yellow active highlight
             "outline_color": "&H00000000",     # Deep Black outline
-            "back_color": "&H90000000",        # Drop shadow
+            "back_color": "&HA0000000",        # Deep drop shadow
             "bold": -1,
-            "outline": 5,
-            "shadow": 2,
-            "margin_v": 300,
-            "chunk_size": 3,
+            "outline": 7,
+            "shadow": 3,
+            "margin_v": 650,                   # Center-lower mobile safe zone
+            "chunk_size": 2,                   # Rapid 2-word mobile retention pacing
             "word_highlight": True,
             "bounce_animation": True,
             "uppercase": True,
@@ -100,15 +100,15 @@ class SubtitleGenerator:
         },
         "beast_bounce": {
             "font_name": "Impact",
-            "font_size": 68,
+            "font_size": 74,
             "primary_color": "&H00FFFFFF",     # Crisp White text
             "secondary_color": "&H0033FF00",   # Electric Lime Green active
             "outline_color": "&H00000000",     # Deep Black outline
             "back_color": "&HA0000000",
             "bold": -1,
-            "outline": 6,
-            "shadow": 3,
-            "margin_v": 310,
+            "outline": 8,
+            "shadow": 4,
+            "margin_v": 650,
             "chunk_size": 2,                   # Rapid 2-word chunks
             "word_highlight": True,
             "bounce_animation": True,
@@ -118,16 +118,16 @@ class SubtitleGenerator:
         },
         "neon_cyber": {
             "font_name": "Arial Black",
-            "font_size": 60,
+            "font_size": 66,
             "primary_color": "&H00FFFFFF",
             "secondary_color": "&H00FFFF00",   # Electric Cyan active
             "outline_color": "&H001A0B2E",     # Midnight Purple outline
             "back_color": "&H90FF00AA",        # Neon Magenta shadow
             "bold": -1,
-            "outline": 5,
+            "outline": 6,
             "shadow": 3,
-            "margin_v": 290,
-            "chunk_size": 3,
+            "margin_v": 650,
+            "chunk_size": 2,
             "word_highlight": True,
             "bounce_animation": True,
             "uppercase": False,
@@ -136,16 +136,16 @@ class SubtitleGenerator:
         },
         "karaoke_gold": {
             "font_name": "Impact",
-            "font_size": 64,
+            "font_size": 68,
             "primary_color": "&H00FFFFFF",
             "secondary_color": "&H0000D7FF",   # Rich Gold progressive fill
             "outline_color": "&H00000000",
             "back_color": "&HA0000000",
             "bold": -1,
-            "outline": 5,
-            "shadow": 2,
-            "margin_v": 290,
-            "chunk_size": 3,
+            "outline": 6,
+            "shadow": 3,
+            "margin_v": 650,
+            "chunk_size": 2,
             "word_highlight": True,
             "bounce_animation": False,
             "uppercase": True,
@@ -359,10 +359,33 @@ class SubtitleGenerator:
                         line_text = " ".join(styled_words)
                         events.append(f"Dialogue: 0,{t_start},{t_end},Default,,0,0,0,,{line_text}")
                     elif self.word_highlight:
-                        # Produce individual word events with active highlight color & micro-bounce
+                        # Produce seamless word events with active highlight color & micro-bounce
+                        # Avoid gaps/flicker by holding the chunk continuously on-screen
+                        natural_chunk_end = max(min(chunk[-1].end - c_start, candidate.duration_seconds), chunk_start + 0.1)
+                        if i + chunk_sz < len(words_in_seg):
+                            next_start = max(words_in_seg[i + chunk_sz].start - c_start, chunk_start)
+                            # Bridge micro-pauses (< 0.45s) between chunks to avoid flickering
+                            if (next_start - natural_chunk_end) < 0.45:
+                                seamless_chunk_end = next_start
+                            else:
+                                seamless_chunk_end = natural_chunk_end + 0.15
+                        else:
+                            seamless_chunk_end = min(natural_chunk_end + 0.20, candidate.duration_seconds)
+
                         for w_idx, active_word in enumerate(chunk):
-                            w_rel_start = max(active_word.start - c_start, chunk_start)
-                            w_rel_end = max(min(active_word.end - c_start, chunk_end), w_rel_start + 0.08)
+                            if w_idx == 0:
+                                w_rel_start = chunk_start
+                            else:
+                                w_rel_start = max(active_word.start - c_start, chunk_start)
+
+                            if w_idx < len(chunk) - 1:
+                                w_rel_end = max(chunk[w_idx + 1].start - c_start, w_rel_start + 0.08)
+                            else:
+                                w_rel_end = seamless_chunk_end
+
+                            if w_rel_end <= w_rel_start:
+                                w_rel_end = w_rel_start + 0.10
+
                             t_start = self._format_timestamp_ass(w_rel_start)
                             t_end = self._format_timestamp_ass(w_rel_end)
 
@@ -377,8 +400,8 @@ class SubtitleGenerator:
                                     badge = self.get_emoji_badge(clean_word)
                                     word_display = f"{clean_word}{badge}"
                                     if self.bounce_animation:
-                                        bounce_tag = r"{\t(0,50,\fscx116\fscy116)\t(50,110,\fscx100\fscy100)}"
-                                        styled_words.append(f"{bounce_tag}{{\\c{active_color}&}}{word_display}{{\\c{self.primary_color}&}}")
+                                        bounce_tag = r"{\t(0,60,\fscx118\fscy118)\t(60,130,\fscx100\fscy100)}"
+                                        styled_words.append(f"{bounce_tag}{{\\c{active_color}&}}{word_display}{{\\fscx100\\fscy100\\c{self.primary_color}&}}")
                                     else:
                                         styled_words.append(f"{{\\c{active_color}&}}{word_display}{{\\c{self.primary_color}&}}")
                                 else:
