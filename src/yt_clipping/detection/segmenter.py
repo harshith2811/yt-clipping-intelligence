@@ -20,18 +20,21 @@ class ContextAwareSegmenter(HighlightDetector):
 
     def __init__(
         self,
-        default_min_duration: float = 20.0,
+        default_min_duration: float = 15.0,
         default_max_duration: float = 60.0,
-        target_duration: float = 35.0,
+        target_duration: Optional[float] = None,
+        dynamic_windowing: bool = True,
     ):
         self.default_min_duration = default_min_duration
         self.default_max_duration = default_max_duration
         self.target_duration = target_duration
+        self.dynamic_windowing = dynamic_windowing
 
     def _normalize_segments(self, segments: List[TranscriptSegment], max_dur: float) -> List[TranscriptSegment]:
-        """Splits any oversized transcript segments into target duration chunks."""
+        """Splits any oversized transcript segments into manageable duration chunks."""
         normalized: List[TranscriptSegment] = []
         seg_counter = 1
+        chunk_target = self.target_duration or min(45.0, max_dur)
         for seg in segments:
             dur = seg.end - seg.start
             # Skip invalid or negative-duration segments
@@ -48,7 +51,7 @@ class ContextAwareSegmenter(HighlightDetector):
                 w_start = seg.words[0].start
                 for w in seg.words:
                     chunk_words.append(w)
-                    if (w.end - w_start) >= self.target_duration:
+                    if (w.end - w_start) >= chunk_target:
                         chunk_text = " ".join(cw.word for cw in chunk_words)
                         if w.end > w_start:
                             normalized.append(
@@ -80,7 +83,7 @@ class ContextAwareSegmenter(HighlightDetector):
                 words = seg.text.split()
                 if not words:
                     continue
-                num_chunks = max(int(dur // self.target_duration) + 1, 1)
+                num_chunks = max(int(dur // chunk_target) + 1, 1)
                 chunk_size = max(len(words) // num_chunks, 1)
                 chunk_dur = dur / num_chunks
                 for idx in range(0, len(words), chunk_size):
@@ -145,7 +148,7 @@ class ContextAwareSegmenter(HighlightDetector):
             )
             return [cand]
 
-        target_win = min(self.target_duration, max_duration)
+        target_win = min(self.target_duration or 35.0, max_duration)
         step = max(target_win / 2.0, 10.0)
 
         cur_start = 0.0
@@ -195,6 +198,66 @@ class ContextAwareSegmenter(HighlightDetector):
             return candidates
 
         return suppress_overlapping_candidates(candidates, iou_threshold=0.40, containment_threshold=0.65)
+
+    def _create_and_append_candidate(
+        self,
+        window_tuple: tuple,
+        transcript: Transcript,
+        raw_candidates: List[HighlightCandidate],
+    ) -> None:
+        w_start, w_end, w_dur, w_parts = window_tuple
+        if w_end <= w_start or w_dur <= 0.0:
+            return
+
+        full_text = " ".join(w_parts).strip()
+        first_sentence = w_parts[0].strip()
+
+        # Dynamic heuristic scoring
+        hook_score = 5.0
+        first_lower = first_sentence.lower()
+        if any(w in first_lower for w in ["why", "how", "what", "is", "this", "the secret", "here's", "never"]):
+            hook_score += 1.5
+
+        ends_sentence = full_text.endswith((".", "!", "?"))
+        coherence_score = 7.5 if ends_sentence else 6.0
+        if full_text and full_text[0].isupper():
+            coherence_score += 1.0
+
+        # WPM estimation for pacing
+        num_words = len(full_text.split())
+        wpm = (num_words / max(w_dur, 1.0)) * 60.0
+        if 135.0 <= wpm <= 185.0:
+            pacing_score = 8.5
+        elif 110.0 <= wpm <= 210.0:
+            pacing_score = 7.0
+        else:
+            pacing_score = 5.0
+
+        breakdown = ScoreBreakdown(
+            hook_score=min(hook_score, 10.0),
+            moment_score=5.0,
+            coherence_score=min(coherence_score, 10.0),
+            pacing_score=pacing_score,
+            confidence=0.8,
+            rationale=f"Dynamic semantic candidate ({w_dur:.1f}s) bounded to natural sentence completion.",
+        )
+        score = breakdown.compute_composite_score()
+
+        cid = f"cand-{transcript.video_id}-{uuid.uuid4().hex[:8]}"
+        cand = HighlightCandidate(
+            candidate_id=cid,
+            video_id=transcript.video_id,
+            start_seconds=round(w_start, 2),
+            end_seconds=round(w_end, 2),
+            duration_seconds=round(w_dur, 2),
+            score=score,
+            breakdown=breakdown,
+            hook_title=first_sentence[:60] + ("..." if len(first_sentence) > 60 else ""),
+            suggested_description=f"Highlight from {transcript.video_id}: {full_text[:100]}...",
+            rationale=f"Dynamic context window from {w_start:.1f}s to {w_end:.1f}s ({w_dur:.1f}s).",
+            transcript_text=full_text,
+        )
+        raw_candidates.append(cand)
 
     def detect_candidates(
         self,
@@ -274,9 +337,34 @@ class ContextAwareSegmenter(HighlightDetector):
             cand_start = start_seg.start
             text_parts = [start_seg.text]
 
-            best_window = None
-            best_diff = float("inf")
+            # Legacy single target duration behavior if dynamic_windowing is explicitly disabled
+            if not self.dynamic_windowing and self.target_duration is not None:
+                best_window = None
+                best_diff = float("inf")
+                for j in range(i, n):
+                    end_seg = segments[j]
+                    if j > i:
+                        text_parts.append(end_seg.text)
+                    cand_end = end_seg.end
+                    cand_dur = cand_end - cand_start
+                    if cand_dur >= min_dur and cand_dur <= max_dur:
+                        ends_sentence = end_seg.text.strip().endswith((".", "!", "?"))
+                        diff = abs(cand_dur - self.target_duration)
+                        effective_diff = diff if ends_sentence else diff + 10.0
+                        if effective_diff < best_diff:
+                            best_diff = effective_diff
+                            best_window = (cand_start, cand_end, cand_dur, list(text_parts))
+                        if cand_dur >= self.target_duration and ends_sentence:
+                            break
+                    elif cand_dur > max_dur:
+                        break
+                if best_window:
+                    self._create_and_append_candidate(best_window, transcript, raw_candidates)
+                continue
 
+            # Dynamic Windowing: Discover all complete semantic thought units bounded to sentence endings or natural speech pauses
+            has_emitted_thought = False
+            last_valid_window = None
             for j in range(i, n):
                 end_seg = segments[j]
                 if j > i:
@@ -286,54 +374,24 @@ class ContextAwareSegmenter(HighlightDetector):
                 cand_dur = cand_end - cand_start
 
                 if cand_dur >= min_dur and cand_dur <= max_dur:
-                    # Preference for complete sentence endings near target_duration
                     ends_sentence = end_seg.text.strip().endswith((".", "!", "?"))
-                    diff = abs(cand_dur - self.target_duration)
-                    effective_diff = diff if ends_sentence else diff + 10.0
+                    has_pause = (j < n - 1 and (segments[j + 1].start - end_seg.end) >= 0.5)
 
-                    if effective_diff < best_diff:
-                        best_diff = effective_diff
-                        best_window = (cand_start, cand_end, cand_dur, list(text_parts))
+                    if ends_sentence or has_pause:
+                        self._create_and_append_candidate(
+                            (cand_start, cand_end, cand_dur, list(text_parts)),
+                            transcript,
+                            raw_candidates,
+                        )
+                        has_emitted_thought = True
 
-                    if cand_dur >= self.target_duration and ends_sentence:
-                        break
+                    last_valid_window = (cand_start, cand_end, cand_dur, list(text_parts))
                 elif cand_dur > max_dur:
                     break
 
-            if best_window:
-                w_start, w_end, w_dur, w_parts = best_window
-                # BUG-15 fix: guarantee w_end > w_start and positive duration
-                if w_end <= w_start or w_dur <= 0.0:
-                    continue
-
-                full_text = " ".join(w_parts).strip()
-                first_sentence = w_parts[0].strip()
-
-                breakdown = ScoreBreakdown(
-                    hook_score=5.0,
-                    moment_score=5.0,
-                    coherence_score=7.0,
-                    pacing_score=6.0,
-                    confidence=0.8,
-                    rationale="Candidate segment with complete sentence boundaries.",
-                )
-                score = breakdown.compute_composite_score()
-
-                cid = f"cand-{transcript.video_id}-{uuid.uuid4().hex[:8]}"
-                cand = HighlightCandidate(
-                    candidate_id=cid,
-                    video_id=transcript.video_id,
-                    start_seconds=round(w_start, 2),
-                    end_seconds=round(w_end, 2),
-                    duration_seconds=round(w_dur, 2),
-                    score=score,
-                    breakdown=breakdown,
-                    hook_title=first_sentence[:60] + ("..." if len(first_sentence) > 60 else ""),
-                    suggested_description=f"Highlight from {transcript.video_id}: {full_text[:100]}...",
-                    rationale=f"Context-safe window from {w_start:.1f}s to {w_end:.1f}s ({w_dur:.1f}s).",
-                    transcript_text=full_text,
-                )
-                raw_candidates.append(cand)
+            # Fallback for unpunctuated continuous segments
+            if not has_emitted_thought and last_valid_window:
+                self._create_and_append_candidate(last_valid_window, transcript, raw_candidates)
 
         if not deduplicate:
             return raw_candidates

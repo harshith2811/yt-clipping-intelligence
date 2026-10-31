@@ -238,3 +238,91 @@ def test_autoprobe_cli_syntax(tmp_path):
     assert res.returncode == 0
     assert "Autoprobing YouTube creator channel" in res.stdout
     assert "Affiliate Rights Manifest Verified" in res.stdout
+
+
+def test_dynamic_reel_timestamping_and_durations():
+    """
+    Verifies that clip duration is completely dynamic:
+    - Semantic thought windowing produces varied durations (e.g. 18s, 27s, 50s) matching sentence payoffs.
+    - Candidates are NOT forced or penalized towards an arbitrary ~35.0s window.
+    - Heatmap peaks derive clip durations dynamically from peak prominence width (FWHM).
+    """
+    from src.yt_clipping.discovery.heatmap import HeatmapAnalyzer, HeatmapPoint
+
+    # 1. Test Semantic Thought Windowing with varying thought lengths
+    # Thought 1: 0 to 18s (punchline payoff)
+    # Thought 2: 18 to 44s (26s comparison)
+    # Thought 3: 44 to 92s (48s comprehensive breakdown)
+    segments = [
+        TranscriptSegment(segment_id=1, start=0.0, end=6.0, text="Here is the one mistake everyone makes with AI."),
+        TranscriptSegment(segment_id=2, start=6.0, end=12.0, text="They treat it like a search engine instead of an intern."),
+        TranscriptSegment(segment_id=3, start=12.0, end=18.0, text="Give it clear instructions and it will blow your mind!"),  # 18.0s complete thought
+        TranscriptSegment(segment_id=4, start=18.0, end=27.0, text="Look at the architecture of modern reasoning models."),
+        TranscriptSegment(segment_id=5, start=27.0, end=36.0, text="They generate hundreds of hidden tokens before answering."),
+        TranscriptSegment(segment_id=6, start=36.0, end=44.0, text="That self-correction loop changes everything completely."),  # 26.0s complete thought (18-44)
+        TranscriptSegment(segment_id=7, start=44.0, end=56.0, text="When we tested this across ten thousand production requests."),
+        TranscriptSegment(segment_id=8, start=56.0, end=68.0, text="The failure rate dropped from twenty percent down to zero point one percent."),
+        TranscriptSegment(segment_id=9, start=68.0, end=80.0, text="And the latency increase was less than forty milliseconds overall."),
+        TranscriptSegment(segment_id=10, start=80.0, end=92.0, text="Would you ever go back to single-pass generation after seeing that?"),  # 48.0s complete thought (44-92)
+    ]
+    transcript = Transcript(
+        video_id="dynamic_dur_vid",
+        language="en",
+        duration_seconds=95.0,
+        text="Full transcript text.",
+        segments=segments,
+    )
+
+    segmenter = ContextAwareSegmenter(default_min_duration=15.0, default_max_duration=60.0, dynamic_windowing=True)
+    candidates = segmenter.detect_candidates(transcript, deduplicate=True)
+
+    assert len(candidates) > 0
+    durations = [c.duration_seconds for c in candidates]
+
+    # Verify that we have dynamic durations ranging from under 20s to over 40s
+    has_short = any(15.0 <= d <= 22.0 for d in durations)
+    has_medium = any(23.0 <= d <= 32.0 for d in durations)
+    has_long = any(40.0 <= d <= 55.0 for d in durations)
+
+    assert has_short, f"Expected a dynamic short candidate (~18s), got durations: {durations}"
+    assert has_medium or has_long, f"Expected varied dynamic durations, got: {durations}"
+
+    # Verify candidates are snapped strictly to sentence completions
+    for c in candidates:
+        assert c.transcript_text[-1] in [".", "!", "?"], f"Candidate '{c.candidate_id}' does not end on sentence completion"
+
+    # 2. Test Dynamic Heatmap Peak Duration Snapping
+    analyzer = HeatmapAnalyzer(cache_dir="data/heatmaps")
+
+    # Sharp 15s spike
+    spike_points = [
+        HeatmapPoint(start_time=float(i * 2), end_time=float((i + 1) * 2), value=0.2)
+        for i in range(50)
+    ]
+    # Inject spike between 20s and 34s (center 27s)
+    for i in range(10, 17):
+        spike_points[i] = HeatmapPoint(start_time=float(i * 2), end_time=float((i + 1) * 2), value=0.9)
+
+    spike_peaks = analyzer.detect_peaks(spike_points, total_duration=100.0, transcript=transcript)
+    assert len(spike_peaks) > 0
+    sharp_pk = spike_peaks[0]
+    sharp_dur = sharp_pk.suggested_clip_end - sharp_pk.suggested_clip_start
+    # Dynamic sharp peak duration should be around 18-28s, NOT hardcoded 35.0s
+    assert 15.0 <= sharp_dur <= 28.0, f"Expected dynamic sharp peak duration ~20s, got {sharp_dur}s"
+    assert sharp_dur != 35.0
+
+    # Wide 46s sustained wave
+    wide_points = [
+        HeatmapPoint(start_time=float(i * 2), end_time=float((i + 1) * 2), value=0.2)
+        for i in range(60)
+    ]
+    for i in range(15, 38):  # 30s to 76s (46s wide)
+        wide_points[i] = HeatmapPoint(start_time=float(i * 2), end_time=float((i + 1) * 2), value=0.85)
+
+    wide_peaks = analyzer.detect_peaks(wide_points, total_duration=120.0, transcript=transcript)
+    assert len(wide_peaks) > 0
+    wide_pk = wide_peaks[0]
+    wide_dur = wide_pk.suggested_clip_end - wide_pk.suggested_clip_start
+    # Dynamic wide peak duration should naturally encompass the engagement zone (~45-55s), NOT forced to 35.0s
+    assert 40.0 <= wide_dur <= 58.0, f"Expected dynamic wide peak duration ~48s, got {wide_dur}s"
+    assert wide_dur != 35.0

@@ -155,6 +155,8 @@ class ClippingPipeline:
         dry_run: bool = True,
         auto_approve_threshold: float = 65.0,
         job_id: Optional[str] = None,
+        min_duration: Optional[float] = None,
+        max_duration: Optional[float] = None,
     ) -> ClipJob:
         """
         Executes the full pipeline for a video ID.
@@ -246,15 +248,29 @@ class ClippingPipeline:
                         video_id=video_id,
                         duration_seconds=transcript.duration_seconds,
                         transcript=transcript,
+                        min_duration=min_duration or 15.0,
+                        max_duration=max_duration or 60.0,
                     )
                 except Exception:
                     pass
 
                 # Stage 4b: Candidate Detection with Heatmap Peak Integration
                 try:
-                    candidates = self.detector.detect_candidates(transcript, heatmap=heatmap_data)
+                    candidates = self.detector.detect_candidates(
+                        transcript,
+                        min_duration=min_duration,
+                        max_duration=max_duration,
+                        heatmap=heatmap_data,
+                    )
                 except TypeError:
-                    candidates = self.detector.detect_candidates(transcript)
+                    try:
+                        candidates = self.detector.detect_candidates(
+                            transcript,
+                            min_duration=min_duration,
+                            max_duration=max_duration,
+                        )
+                    except TypeError:
+                        candidates = self.detector.detect_candidates(transcript)
 
                 if not candidates:
                     err = f"No valid highlight moments detected for video '{video_id}' within duration bounds."
@@ -411,7 +427,12 @@ class ClippingPipeline:
                 self.journal.mark_failed(job, str(e))
             raise
 
-    def get_candidates(self, video_id: str) -> List[HighlightCandidate]:
+    def get_candidates(
+        self,
+        video_id: str,
+        min_duration: Optional[float] = None,
+        max_duration: Optional[float] = None,
+    ) -> List[HighlightCandidate]:
         """
         Extracts, segments, and scores candidate highlights for a video
         without rendering, allowing operator inspection and preview.
@@ -435,14 +456,28 @@ class ClippingPipeline:
                 video_id=video_id,
                 duration_seconds=transcript.duration_seconds if transcript else 0.0,
                 transcript=transcript,
+                min_duration=min_duration or 15.0,
+                max_duration=max_duration or 60.0,
             )
         except Exception:
             pass
 
         try:
-            candidates = self.detector.detect_candidates(transcript, heatmap=heatmap_data)
+            candidates = self.detector.detect_candidates(
+                transcript,
+                min_duration=min_duration,
+                max_duration=max_duration,
+                heatmap=heatmap_data,
+            )
         except TypeError:
-            candidates = self.detector.detect_candidates(transcript)
+            try:
+                candidates = self.detector.detect_candidates(
+                    transcript,
+                    min_duration=min_duration,
+                    max_duration=max_duration,
+                )
+            except TypeError:
+                candidates = self.detector.detect_candidates(transcript)
         scored = [self.scorer.score_candidate(c, transcript, heatmap=heatmap_data) for c in candidates]
         scored.sort(key=lambda c: c.score, reverse=True)
         # BUG-10 fix: Suppress overlapping candidates on scored candidates

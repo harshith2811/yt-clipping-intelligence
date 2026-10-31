@@ -45,6 +45,9 @@ class HeatmapAnalyzer:
         source_url: Optional[str] = None,
         duration_seconds: float = 0.0,
         transcript: Optional[Transcript] = None,
+        min_duration: float = 15.0,
+        max_duration: float = 60.0,
+        target_duration: Optional[float] = None,
     ) -> HeatmapData:
         """
         Extracts heatmap retention curve using tiered fallback strategy:
@@ -94,7 +97,14 @@ class HeatmapAnalyzer:
         total_duration = duration_seconds or (points[-1].end_time if points else 60.0)
 
         # Detect prominent peaks
-        peaks = self.detect_peaks(points, total_duration, transcript=transcript)
+        peaks = self.detect_peaks(
+            points,
+            total_duration,
+            transcript=transcript,
+            min_duration=min_duration,
+            max_duration=max_duration,
+            target_duration=target_duration,
+        )
         global_peak = max(peaks, key=lambda pk: pk.intensity) if peaks else None
 
         heatmap_data = HeatmapData(
@@ -270,6 +280,9 @@ class HeatmapAnalyzer:
         min_intensity: float = 0.35,
         min_prominence: float = 0.08,
         transcript: Optional[Transcript] = None,
+        min_duration: float = 15.0,
+        max_duration: float = 60.0,
+        target_duration: Optional[float] = None,
     ) -> List[HeatmapPeak]:
         """
         Applies signal smoothing and topological prominence analysis to find true retention peaks.
@@ -349,12 +362,16 @@ class HeatmapAnalyzer:
                 else:
                     classification = "SUSTAINED_ENGAGEMENT"
 
-                # Calculate suggested clipping window with sentence boundary snapping
+                # Calculate suggested clipping window with dynamic sentence boundary snapping
                 clip_st, clip_et = self.snap_peak_to_window(
                     center_time=center,
                     transcript=transcript,
                     total_duration=total_duration,
-                    target_duration=35.0,
+                    target_duration=target_duration,
+                    min_duration=min_duration,
+                    max_duration=max_duration,
+                    peak_start=points[l_idx].start_time,
+                    peak_end=points[r_idx].end_time,
                 )
 
                 peak = HeatmapPeak(
@@ -380,20 +397,51 @@ class HeatmapAnalyzer:
         center_time: float,
         transcript: Optional[Transcript],
         total_duration: float,
-        target_duration: float = 35.0,
-        min_duration: float = 20.0,
+        target_duration: Optional[float] = None,
+        min_duration: float = 15.0,
         max_duration: float = 60.0,
+        peak_start: Optional[float] = None,
+        peak_end: Optional[float] = None,
     ) -> Tuple[float, float]:
         """
         Snaps a peak's timestamp to surrounding sentence boundaries or media bounds.
-        BUG-08 fix: Strictly guarantees duration bounds regardless of transcript presence.
+        Dynamically derives clipping window from peak prominence width and sentence completion
+        rather than forcing a hardcoded ~30-35s duration.
         """
-        # Adjust effective target if media is shorter than target_duration
-        effective_target = min(target_duration, total_duration)
         effective_min = min(min_duration, total_duration)
+        effective_max = min(max_duration, total_duration)
 
-        ideal_start = max(center_time - (effective_target * 0.55), 0.0)
-        ideal_end = min(center_time + (effective_target * 0.45), total_duration)
+        if target_duration is not None and peak_start is None:
+            # Explicit target duration specified without peak bounds (legacy behavior)
+            effective_target = min(target_duration, total_duration)
+            ideal_start = max(center_time - (effective_target * 0.55), 0.0)
+            ideal_end = min(center_time + (effective_target * 0.45), total_duration)
+        elif peak_start is not None and peak_end is not None:
+            # Dynamic windowing around measured retention peak bounds
+            # Provide conversational setup before peak ramp and reaction payoff after peak
+            p_st = max(0.0, peak_start)
+            p_et = min(total_duration, peak_end)
+            raw_start = max(0.0, p_st - 3.0)
+            raw_end = min(total_duration, p_et + 2.5)
+            raw_dur = raw_end - raw_start
+
+            if raw_dur < effective_min:
+                needed = effective_min - raw_dur
+                ideal_start = max(0.0, raw_start - (needed * 0.55))
+                ideal_end = min(total_duration, ideal_start + effective_min)
+                if (ideal_end - ideal_start) < effective_min and ideal_start > 0:
+                    ideal_start = max(0.0, ideal_end - effective_min)
+            elif raw_dur > effective_max:
+                ideal_start = max(0.0, center_time - (effective_max * 0.55))
+                ideal_end = min(total_duration, ideal_start + effective_max)
+            else:
+                ideal_start = raw_start
+                ideal_end = raw_end
+        else:
+            # Fallback dynamic target (balanced around center)
+            target = min(30.0, total_duration)
+            ideal_start = max(center_time - (target * 0.55), 0.0)
+            ideal_end = min(center_time + (target * 0.45), total_duration)
 
         if not transcript or not transcript.segments:
             best_start = ideal_start
@@ -426,8 +474,8 @@ class HeatmapAnalyzer:
                 best_end = min(best_start + effective_min, total_duration)
 
         dur = best_end - best_start
-        if dur > max_duration:
-            best_end = min(best_start + max_duration, total_duration)
+        if dur > effective_max:
+            best_end = min(best_start + effective_max, total_duration)
 
         best_start = max(0.0, best_start)
         best_end = min(total_duration, max(best_start + 0.1, best_end))

@@ -55,12 +55,14 @@ def build_pipeline(
     output_dir: str = "data/rendered_clips",
     autopost_inbox: str = "data/autopost_inbox",
     db_path: str = "data/jobs.db",
+    min_duration: float = 15.0,
+    max_duration: float = 60.0,
 ) -> ClippingPipeline:
     cfg = AppConfig()
     rights_policy = LocalRightsPolicy(ledger_path, db_path=db_path)
     asset_provider = LocalAssetProvider(assets_dir)
     transcriber = LocalTranscriber(transcripts_dir)
-    detector = ContextAwareSegmenter()
+    detector = ContextAwareSegmenter(default_min_duration=min_duration, default_max_duration=max_duration)
     scorer = ExplainableScorecardScorer()
     renderer = FFmpegRenderer()
     verifier = MediaQualityVerifier()
@@ -125,7 +127,13 @@ def cmd_run(args: argparse.Namespace) -> None:
     from ..ingestion.asset_provider import extract_youtube_video_id
     video_id = extract_youtube_video_id(vid_input)
 
-    pipeline = build_pipeline(output_dir=getattr(args, "output_dir", "data/rendered_clips"))
+    min_dur = getattr(args, "min_duration", 15.0)
+    max_dur = getattr(args, "max_duration", 60.0)
+    pipeline = build_pipeline(
+        output_dir=getattr(args, "output_dir", "data/rendered_clips"),
+        min_duration=min_dur,
+        max_duration=max_dur,
+    )
     vcodec = "h264_nvenc" if getattr(args, "gpu", False) else getattr(args, "vcodec", "libx264")
     sub_preset = getattr(args, "subtitle_preset", "hormozi")
     profile = RenderProfile(
@@ -135,7 +143,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     )
 
     print(f"[*] Starting pipeline execution for video: {video_id}")
-    print(f"[*] Profile: {profile.name} (layout={profile.layout_mode}, vcodec={profile.vcodec}, subs={profile.subtitle_preset}), dry_run={args.dry_run}")
+    print(f"[*] Profile: {profile.name} (layout={profile.layout_mode}, vcodec={profile.vcodec}, subs={profile.subtitle_preset}), dry_run={args.dry_run}, bounds=[{min_dur:.0f}s - {max_dur:.0f}s]")
 
     try:
         job = pipeline.process_video(
@@ -143,6 +151,8 @@ def cmd_run(args: argparse.Namespace) -> None:
             profile=profile,
             dry_run=args.dry_run,
             auto_approve_threshold=args.threshold,
+            min_duration=min_dur,
+            max_duration=max_dur,
         )
         print("\n[SUCCESS] Pipeline Completed!")
         print(f"Job ID: {job.job_id}")
@@ -256,13 +266,21 @@ def cmd_autoprobe(args: argparse.Namespace) -> None:
         print(f"[OK] Affiliate Rights Manifest Verified for '{v_id}' ({name}).")
 
         if args.render:
-            print(f"[*] Starting vertical 9:16 rendering pipeline (layout={args.layout}, preset={args.subtitle_preset})...")
-            pipeline = build_pipeline(output_dir=args.output_dir, db_path=args.db)
+            min_dur = getattr(args, "min_duration", 15.0)
+            max_dur = getattr(args, "max_duration", 60.0)
+            print(f"[*] Starting vertical 9:16 rendering pipeline (layout={args.layout}, preset={args.subtitle_preset}, bounds=[{min_dur:.0f}s - {max_dur:.0f}s])...")
+            pipeline = build_pipeline(output_dir=args.output_dir, db_path=args.db, min_duration=min_dur, max_duration=max_dur)
             profile = RenderProfile(
                 layout_mode=args.layout,
                 subtitle_preset=args.subtitle_preset,
             )
-            job = pipeline.process_video(v_id, profile=profile, dry_run=args.dry_run)
+            job = pipeline.process_video(
+                v_id,
+                profile=profile,
+                dry_run=args.dry_run,
+                min_duration=min_dur,
+                max_duration=max_dur,
+            )
 
             # Generate standalone executive HTML report
             report_path = os.path.join(args.output_dir, f"report_{v_id}.html")
@@ -380,10 +398,12 @@ def cmd_jobs(args: argparse.Namespace) -> None:
 
 
 def cmd_preview(args: argparse.Namespace) -> None:
-    pipeline = build_pipeline()
-    print(f"[*] Extracting candidate highlights for video: {args.video_id} (No video render)")
+    min_dur = getattr(args, "min_duration", 15.0)
+    max_dur = getattr(args, "max_duration", 60.0)
+    pipeline = build_pipeline(min_duration=min_dur, max_duration=max_dur)
+    print(f"[*] Extracting candidate highlights for video: {args.video_id} (No video render, bounds=[{min_dur:.0f}s - {max_dur:.0f}s])")
     try:
-        candidates = pipeline.get_candidates(args.video_id)
+        candidates = pipeline.get_candidates(args.video_id, min_duration=min_dur, max_duration=max_dur)
         print(f"\n[OK] Found {len(candidates)} candidate moments (sorted by score):")
         for i, c in enumerate(candidates, 1):
             bd = c.breakdown
@@ -911,6 +931,8 @@ def main() -> None:
     p_auto.add_argument("--channel", required=True, help="YouTube channel ID, @handle, or URL")
     p_auto.add_argument("--max-videos", type=int, default=1, help="Max recent uploads to evaluate (default: 1)")
     p_auto.add_argument("--baseline", type=float, default=10000.0, help="Channel baseline view velocity benchmark")
+    p_auto.add_argument("--min-duration", type=float, default=15.0, help="Minimum highlight clip duration in seconds (default: 15.0)")
+    p_auto.add_argument("--max-duration", type=float, default=60.0, help="Maximum highlight clip duration in seconds (default: 60.0)")
     p_auto.add_argument("--render", action="store_true", help="Render top candidate to vertical 9:16 short")
     p_auto.add_argument("--layout", default="auto", choices=["auto", "blur_background", "crop_center", "split_screen", "active_speaker"], help="Visual layout profile (default auto)")
     p_auto.add_argument("--subtitle-preset", default="hormozi", choices=["hormozi", "beast_bounce", "neon_cyber", "karaoke_gold", "bold_social", "karaoke", "clean_editorial", "classic"], help="Subtitle aesthetic preset")
@@ -922,6 +944,8 @@ def main() -> None:
     # Run command
     p_run = subparsers.add_parser("run", help="Run end-to-end clipping pipeline on authorized asset")
     p_run.add_argument("--video-id", required=True, help="Video ID to process")
+    p_run.add_argument("--min-duration", type=float, default=15.0, help="Minimum highlight clip duration in seconds (default: 15.0)")
+    p_run.add_argument("--max-duration", type=float, default=60.0, help="Maximum highlight clip duration in seconds (default: 60.0)")
     p_run.add_argument("--dry-run", action=argparse.BooleanOptionalAction, default=True, help="Simulate autopost handoff (default true)")
     p_run.add_argument("--layout", default="blur_background", choices=["blur_background", "crop_center", "split_screen", "active_speaker"], help="Visual layout profile")
     p_run.add_argument("--subtitle-preset", default="hormozi", choices=["hormozi", "beast_bounce", "neon_cyber", "karaoke_gold", "bold_social", "karaoke", "clean_editorial", "classic"], help="Subtitle animation and aesthetic styling preset")
@@ -947,6 +971,8 @@ def main() -> None:
     # Preview command
     p_prev = subparsers.add_parser("preview", help="Preview highlight candidates and scorecards without rendering")
     p_prev.add_argument("--video-id", required=True, help="Video ID to inspect")
+    p_prev.add_argument("--min-duration", type=float, default=15.0, help="Minimum highlight clip duration in seconds (default: 15.0)")
+    p_prev.add_argument("--max-duration", type=float, default=60.0, help="Maximum highlight clip duration in seconds (default: 60.0)")
     p_prev.set_defaults(func=cmd_preview)
 
     # Discovery command
