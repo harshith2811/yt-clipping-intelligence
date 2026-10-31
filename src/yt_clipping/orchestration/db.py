@@ -26,6 +26,12 @@ class DatabaseManager:
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
         conn.execute("PRAGMA foreign_keys=ON;")
+        try:
+            conn.execute("PRAGMA mmap_size=268435456;")       # 256MB memory-mapped I/O
+            conn.execute("PRAGMA cache_size=-64000;")         # 64MB page cache
+            conn.execute("PRAGMA temp_store=MEMORY;")         # In-memory temporary tables
+        except sqlite3.OperationalError:
+            pass
         return conn
 
     def init_schema(self) -> None:

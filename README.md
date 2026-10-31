@@ -1,7 +1,7 @@
 # YouTube Clipping Intelligence Platform
 
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue?logo=python)](https://python.org)
-[![Pytest](https://img.shields.io/badge/Tests-84%20Passed%20(100%25)-brightgreen?logo=pytest)](https://pytest.org)
+[![Pytest](https://img.shields.io/badge/Tests-88%20Passed%20(100%25)-brightgreen?logo=pytest)](https://pytest.org)
 [![Zero Quota](https://img.shields.io/badge/YouTube%20Discovery-Zero%20API%20Quota-red?logo=youtube)](docs/VIRALITY_AND_ATTRIBUTION.md)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-Hardware%20Accelerated-007808?logo=ffmpeg)](https://ffmpeg.org)
 [![NVIDIA](https://img.shields.io/badge/GPU-CUDA%20%7C%20NVENC-76B900?logo=nvidia)](https://developer.nvidia.com/video-codec-sdk)
@@ -170,6 +170,21 @@ AUTO_APPROVE_THRESHOLD=65.0
 ## 4. CLI Operator Guide
 
 Detailed instructions are available in [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md).
+
+### 🚀 Unified Discovery-to-Render: `yt-clip autoprobe`
+Scan a creator channel, detect viral velocity, register affiliate attribution, select top moments, and render vertical shorts with executive HTML reporting in one command:
+```bash
+# 1. Sweep channel uploads and evaluate virality in real time
+yt-clip autoprobe --channel "@HubermanLab" --max-videos 1
+
+# 2. End-to-end auto-clipping with Hormozi kinetic captions and auto-layout framing:
+yt-clip autoprobe --channel "@Veritasium" --render --layout auto --subtitle-preset hormozi
+```
+Outputs:
+- Rendered 1080x1920 MP4 vertical short (`data/rendered_clips/<video_id>_...mp4`).
+- Standalone, zero-dependency executive summary report (`data/rendered_clips/report_<video_id>.html`).
+
+---
 
 ### 1. Monitor Channels & Detect New Uploads
 ```bash

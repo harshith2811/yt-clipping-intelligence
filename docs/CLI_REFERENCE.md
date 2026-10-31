@@ -17,6 +17,22 @@ yt-clip [SUBCOMMAND] [OPTIONS]
 
 ### Subcommands
 
+#### `autoprobe`: Autonomous Channel Scan & End-to-End Clipping
+Unified workflow that scans a channel, calculates velocity, auto-registers affiliate attribution, and optionally renders vertical clips with HTML reports.
+```bash
+# Sweep channel uploads and calculate view velocity
+yt-clip autoprobe --channel "@HubermanLab" --max-videos 1
+
+# End-to-end auto-clipping with Hormozi kinetic captions and auto-layout framing:
+yt-clip autoprobe --channel "@Veritasium" --render --layout auto --subtitle-preset hormozi
+```
+- `--channel` *(required)*: YouTube channel ID (`UC...`), `@handle`, or channel URL.
+- `--max-videos` *(optional, default: 1)*: Maximum recent uploads to evaluate.
+- `--baseline` *(optional, default: 10000.0)*: Channel baseline view velocity benchmark.
+- `--render` *(optional)*: Enables full vertical 9:16 rendering.
+- `--layout` *(optional, default: `auto`)*: Dynamic layout selection (`auto`, `blur_background`, `split_screen`, `active_speaker`, `crop_center`).
+- `--subtitle-preset` *(optional, default: `hormozi`)*: Subtitle style preset.
+
 #### `run`: Full Pipeline Execution
 Executes the full pipeline for a verified video from highlight selection through rendering and publishing.
 ```bash

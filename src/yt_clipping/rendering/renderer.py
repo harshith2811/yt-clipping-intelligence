@@ -194,9 +194,21 @@ class FFmpegRenderer(Renderer):
                 generator = SubtitleGenerator(style_preset=preset)
             generator.generate_ass(candidate, transcript, sub_path)
 
-        # Compute dynamic crop if active_speaker layout selected
+        # Compute dynamic framing and auto-layout resolution
+        effective_profile = profile
         crop_override = None
-        if profile.layout_mode == "active_speaker":
+        if profile.layout_mode == "auto":
+            framer_res = self.face_framer.analyze_crop_window(
+                video_path=source_path,
+                start_seconds=candidate.start_seconds,
+                duration_seconds=candidate.duration_seconds,
+            )
+            rec_layout = framer_res.get("recommended_layout", "blur_background")
+            crop_override = framer_res.get("ffmpeg_crop_filter") if rec_layout == "active_speaker" else None
+            # Clone profile with dynamically resolved layout mode
+            from dataclasses import replace
+            effective_profile = replace(profile, layout_mode=rec_layout)
+        elif profile.layout_mode == "active_speaker":
             framer_res = self.face_framer.analyze_crop_window(
                 video_path=source_path,
                 start_seconds=candidate.start_seconds,
@@ -208,7 +220,7 @@ class FFmpegRenderer(Renderer):
             source_path=source_path,
             start_seconds=candidate.start_seconds,
             duration_seconds=candidate.duration_seconds,
-            profile=profile,
+            profile=effective_profile,
             output_path=temp_path,
             subtitle_ass_path=sub_path,
             crop_override=crop_override,

@@ -239,17 +239,7 @@ class ClippingPipeline:
             if JobStage.SCORED.value in job.checkpoints and job.candidate:
                 top_candidate = job.candidate
             else:
-                candidates = self.detector.detect_candidates(transcript)
-                if not candidates:
-                    err = f"No valid highlight moments detected for video '{video_id}' within duration bounds."
-                    self.journal.mark_failed(job, err)
-                    raise RuntimeError(err)
-
-                self.journal.record_stage_checkpoint(
-                    job, JobStage.SEGMENTED, {"num_candidates": len(candidates)}
-                )
-
-                # Stage 5: Highlight Scoring & Reranking with Heatmap Intelligence
+                # Stage 4a: Extract Audience Retention Heatmap
                 heatmap_data = None
                 try:
                     heatmap_data = self.heatmap_analyzer.extract_heatmap(
@@ -260,6 +250,22 @@ class ClippingPipeline:
                 except Exception:
                     pass
 
+                # Stage 4b: Candidate Detection with Heatmap Peak Integration
+                try:
+                    candidates = self.detector.detect_candidates(transcript, heatmap=heatmap_data)
+                except TypeError:
+                    candidates = self.detector.detect_candidates(transcript)
+
+                if not candidates:
+                    err = f"No valid highlight moments detected for video '{video_id}' within duration bounds."
+                    self.journal.mark_failed(job, err)
+                    raise RuntimeError(err)
+
+                self.journal.record_stage_checkpoint(
+                    job, JobStage.SEGMENTED, {"num_candidates": len(candidates)}
+                )
+
+                # Stage 5: Highlight Scoring & Reranking with Heatmap Intelligence
                 scored_candidates = [
                     self.scorer.score_candidate(c, transcript, heatmap=heatmap_data)
                     for c in candidates
@@ -291,6 +297,26 @@ class ClippingPipeline:
                     top_candidate.ai_metadata = meta.to_dict()
                 except Exception:
                     pass
+
+            # Stage 5c: Ingest Discovered Attribution & Virality Metadata
+            try:
+                db_m = getattr(self.journal, "db", None)
+                if db_m and top_candidate:
+                    conn = db_m.get_connection()
+                    try:
+                        cur = conn.execute(
+                            "SELECT attribution_text, hourly_velocity, velocity_multiplier, virality_classification FROM discovered_uploads WHERE video_id = ?",
+                            (video_id,),
+                        )
+                        d_row = cur.fetchone()
+                        if d_row:
+                            d_attr, d_vel, d_mult, d_class = d_row
+                            if d_attr and d_attr not in (top_candidate.suggested_description or ""):
+                                top_candidate.suggested_description = f"{top_candidate.suggested_description or ''}\n\n{d_attr}".strip()
+                    finally:
+                        conn.close()
+            except Exception:
+                pass
 
             # Stage 6: Review / Approval Gate
             if top_candidate.score >= auto_approve_threshold:

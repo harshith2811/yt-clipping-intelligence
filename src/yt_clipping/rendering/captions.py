@@ -399,8 +399,13 @@ class SubtitleGenerator:
                                     active_color = self.get_active_word_color(clean_word)
                                     badge = self.get_emoji_badge(clean_word)
                                     word_display = f"{clean_word}{badge}"
+                                    is_hook_opening = (w_rel_start <= 3.5 and getattr(getattr(candidate, "breakdown", None), "hook_score", 0.0) >= 7.5)
                                     if self.bounce_animation:
-                                        bounce_tag = r"{\t(0,60,\fscx118\fscy118)\t(60,130,\fscx100\fscy100)}"
+                                        bounce_tag = (
+                                            r"{\t(0,60,\fscx124\fscy124)\t(60,130,\fscx100\fscy100)}"
+                                            if is_hook_opening
+                                            else r"{\t(0,60,\fscx118\fscy118)\t(60,130,\fscx100\fscy100)}"
+                                        )
                                         styled_words.append(f"{bounce_tag}{{\\c{active_color}&}}{word_display}{{\\fscx100\\fscy100\\c{self.primary_color}&}}")
                                     else:
                                         styled_words.append(f"{{\\c{active_color}&}}{word_display}{{\\c{self.primary_color}&}}")

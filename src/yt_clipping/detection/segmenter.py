@@ -5,7 +5,7 @@ and target duration constraints rather than arbitrary fixed time windows.
 Guarantees end_time > start_time and duration > 0.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Any
 import uuid
 from ..contracts.models import Transcript, TranscriptSegment, HighlightCandidate, ScoreBreakdown
 from ..contracts.interfaces import HighlightDetector
@@ -202,6 +202,7 @@ class ContextAwareSegmenter(HighlightDetector):
         min_duration: Optional[float] = None,
         max_duration: Optional[float] = None,
         deduplicate: bool = True,
+        heatmap: Optional[Any] = None,
     ) -> List[HighlightCandidate]:
         min_dur = min_duration or self.default_min_duration
         max_dur = max_duration or self.default_max_duration
@@ -224,6 +225,47 @@ class ContextAwareSegmenter(HighlightDetector):
 
         segments = self._normalize_segments(raw_segments, max_dur)
         raw_candidates: List[HighlightCandidate] = []
+
+        # Feature: Synthesize candidates directly anchored to audience retention peaks
+        if heatmap and hasattr(heatmap, "peaks") and heatmap.peaks:
+            for pk in heatmap.peaks:
+                pk_start = max(pk.suggested_clip_start, 0.0)
+                media_limit = transcript.duration_seconds if (transcript.duration_seconds and transcript.duration_seconds > 0) else pk.suggested_clip_end
+                pk_end = min(pk.suggested_clip_end, media_limit)
+                pk_dur = pk_end - pk_start
+                if pk_dur >= min_dur and pk_dur <= max_dur:
+                    matching_texts = [
+                        s.text for s in raw_segments
+                        if s.end >= pk_start and s.start <= pk_end
+                    ]
+                    full_pk_text = " ".join(matching_texts).strip()
+                    first_line = matching_texts[0].strip() if matching_texts else f"Peak Moment at {pk_start:.0f}s"
+                    cid = f"cand-peak-{transcript.video_id}-{pk.peak_id}"
+                    breakdown = ScoreBreakdown(
+                        hook_score=6.0,
+                        moment_score=7.0,
+                        coherence_score=7.0,
+                        pacing_score=6.0,
+                        heatmap_score=min(pk.intensity * 10.0, 10.0),
+                        confidence=0.85,
+                        rationale=f"Audience replay peak [{pk.classification}] intensity {pk.intensity*100:.0f}%.",
+                    )
+                    cand = HighlightCandidate(
+                        candidate_id=cid,
+                        video_id=transcript.video_id,
+                        start_seconds=round(pk_start, 2),
+                        end_seconds=round(pk_end, 2),
+                        duration_seconds=round(pk_dur, 2),
+                        score=breakdown.compute_composite_score(),
+                        breakdown=breakdown,
+                        hook_title=first_line[:60] + ("..." if len(first_line) > 60 else ""),
+                        suggested_description=f"Audience Peak from {transcript.video_id}: {full_pk_text[:100]}...",
+                        rationale=f"Peak-anchored candidate [{pk.classification}] from {pk_start:.1f}s to {pk_end:.1f}s.",
+                        transcript_text=full_pk_text,
+                    )
+                    if cand.validate_bounds(media_limit):
+                        raw_candidates.append(cand)
+
         n = len(segments)
 
         # Slide through segments to find coherent windows
