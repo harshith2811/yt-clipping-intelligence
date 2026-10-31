@@ -273,7 +273,8 @@ class ClippingPipeline:
                 scored_candidates.sort(key=lambda c: c.score, reverse=True)
                 # BUG-10 fix: Suppress overlapping candidates on scored and ranked candidates
                 filtered_candidates = suppress_overlapping_candidates(scored_candidates)
-                top_candidate = filtered_candidates[0] if filtered_candidates else scored_candidates[0]
+                # Select highest scoring candidate from deduplicated pool
+                top_candidate = max(filtered_candidates, key=lambda c: c.score) if filtered_candidates else scored_candidates[0]
                 job.candidate = top_candidate
                 self.journal.record_stage_checkpoint(
                     job,
