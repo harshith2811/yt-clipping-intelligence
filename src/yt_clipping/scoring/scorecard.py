@@ -22,6 +22,11 @@ PAYOFF_KEYWORDS = {
     "key takeaway", "result", "finally", "realized", "in fact", "ultimately", "remember"
 }
 
+SPONSOR_KEYWORDS = {
+    "sponsor", "sponsored", "use code", "link in description", "discount", "percent off",
+    "patreon", "merch", "displate", "nordvpn", "expressvpn", "audible", "skillshare", "squarespace"
+}
+
 
 class ExplainableScorecardScorer(HighlightScorer):
     """
@@ -32,7 +37,59 @@ class ExplainableScorecardScorer(HighlightScorer):
     - Speech Pacing (0-10)
     - Audio Inflection / Energy (0-10)
     - Visual Legibility (0-10)
+    Supports hybrid LLM co-pilot scoring with local Ollama models (Llama 3.2, DeepSeek-R1, Gemma 3).
     """
+
+    def __init__(
+        self,
+        llm_api_base: Optional[str] = None,
+        llm_model: Optional[str] = None,
+        use_llm: bool = False,
+        timeout: int = 15,
+    ):
+        import os
+        self.llm_api_base = (llm_api_base or os.getenv("LLM_API_BASE") or "").rstrip("/")
+        self.llm_model = llm_model or os.getenv("LLM_MODEL", "llama3.2:1b")
+        self.use_llm = use_llm
+        self.timeout = timeout
+
+    def _evaluate_with_llm(self, text: str) -> Optional[dict]:
+        """Queries local Ollama model to verify hook crispness and detect sponsor ad contamination."""
+        if not self.llm_api_base or not text:
+            return None
+        import urllib.request
+        import json
+        prompt = (
+            f"You are an expert video editor. Critique this candidate short transcript:\n"
+            f"\"{text[:800]}\"\n\n"
+            f"Evaluate in JSON:\n"
+            f"- 'is_sponsor_ad': boolean (true if sponsor read / promo / merch plug / discount)\n"
+            f"- 'hook_score': float 0.0 to 10.0\n"
+            f"- 'payoff_score': float 0.0 to 10.0\n"
+            f"- 'crispness_score': float 0.0 to 10.0\n"
+            f"Respond ONLY with valid JSON."
+        )
+        try:
+            format_arg = "" if "r1" in self.llm_model.lower() else "json"
+            req = urllib.request.Request(
+                f"{self.llm_api_base}/api/generate",
+                data=json.dumps({
+                    "model": self.llm_model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": format_arg,
+                }).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                res = json.loads(resp.read().decode("utf-8"))
+                raw = res.get("response", "")
+                m = re.search(r"\{.*\}", raw, re.DOTALL)
+                if m:
+                    return json.loads(m.group(0))
+        except Exception:
+            pass
+        return None
 
     def score_candidate(
         self,
@@ -79,6 +136,30 @@ class ExplainableScorecardScorer(HighlightScorer):
         if text and text[-1] in [".", "!", "?"]:
             coherence_score += 2.5
         coherence_score = max(min(coherence_score, 10.0), 0.0)
+
+        # Check sponsor ad keyword contamination
+        sponsor_matches = sum(1 for kw in SPONSOR_KEYWORDS if kw in text_lower)
+        if sponsor_matches > 0:
+            moment_score = max(0.0, moment_score - (sponsor_matches * 2.5))
+            coherence_score = max(0.0, coherence_score - (sponsor_matches * 2.5))
+
+        # Hybrid LLM evaluation if enabled
+        llm_rationale = ""
+        if self.use_llm:
+            llm_eval = self._evaluate_with_llm(text)
+            if llm_eval:
+                if llm_eval.get("is_sponsor_ad"):
+                    hook_score = min(hook_score, 1.5)
+                    moment_score = min(moment_score, 1.0)
+                    llm_rationale = ", [AI: Sponsor Ad Detected]"
+                else:
+                    llm_h = float(llm_eval.get("hook_score", hook_score))
+                    llm_p = float(llm_eval.get("payoff_score", moment_score))
+                    hook_score = round(0.5 * hook_score + 0.5 * llm_h, 1)
+                    moment_score = round(0.5 * moment_score + 0.5 * llm_p, 1)
+                    crisp = llm_eval.get("crispness_score")
+                    if crisp is not None:
+                        llm_rationale = f", [AI Crispness={crisp}/10]"
 
         # 4. Pacing Score (0 to 10) based on Words Per Minute (WPM)
         wpm = (num_words / duration) * 60.0
@@ -141,7 +222,7 @@ class ExplainableScorecardScorer(HighlightScorer):
             rationale=(
                 f"Hook={hook_score:.1f}/10, Payoff={moment_score:.1f}/10, "
                 f"Coherence={coherence_score:.1f}/10, Cadence={wpm:.0f} WPM ({pacing_score:.1f}/10)"
-                f"{heatmap_rationale}. Confidence={confidence:.2f}."
+                f"{heatmap_rationale}{llm_rationale}. Confidence={confidence:.2f}."
             ),
         )
 

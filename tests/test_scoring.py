@@ -74,3 +74,25 @@ def test_coherence_penalty_for_dangling_starts():
 
     scored = scorer.score_candidate(candidate, transcript)
     assert scored.breakdown.coherence_score < 6.0
+
+
+def test_sponsor_ad_penalty():
+    scorer = ExplainableScorecardScorer()
+    transcript = Transcript(video_id="v1", language="en", duration_seconds=60.0, text="")
+
+    # Candidate contains sponsor read
+    candidate = HighlightCandidate(
+        candidate_id="c_sponsor",
+        video_id="v1",
+        start_seconds=10.0,
+        end_seconds=40.0,
+        duration_seconds=30.0,
+        score=0.0,
+        breakdown=ScoreBreakdown(),
+        hook_title="Sponsor plug",
+        transcript_text="Use code DISPLATE for 30 percent off your next order with our discount link in description.",
+    )
+
+    scored = scorer.score_candidate(candidate, transcript)
+    assert scored.breakdown.moment_score <= 2.0
+    assert scored.breakdown.coherence_score <= 2.0
