@@ -76,17 +76,22 @@ class JobQueue:
         priority: JobPriority = JobPriority.NORMAL,
         job_id: Optional[str] = None,
         max_retries: int = 3,
+        metadata: Optional[Dict[str, Any]] = None,
+        initial_stage: Optional[Any] = None,
     ) -> str:
         """Enqueues a new clipping job."""
         actual_job_id = job_id or f"job-{video_id}-{int(datetime.now(timezone.utc).timestamp())}"
         now = datetime.now(timezone.utc).isoformat()
+        stage = initial_stage if isinstance(initial_stage, JobStage) else JobStage.DISCOVERED
         initial_job = ClipJob(
             job_id=actual_job_id,
             video_id=video_id,
-            current_stage=JobStage.DISCOVERED,
+            current_stage=stage,
             status=JobStatus.PENDING,
             max_retries=max_retries,
         )
+        if metadata:
+            initial_job.record_checkpoint(stage, metadata)
         data_json = json.dumps(initial_job.to_dict())
 
         conn = self.db.get_connection()
@@ -105,7 +110,7 @@ class JobQueue:
                     (
                         actual_job_id,
                         video_id,
-                        JobStage.DISCOVERED.value,
+                        stage.value,
                         JobStatus.PENDING.value,
                         int(priority),
                         max_retries,
@@ -117,6 +122,9 @@ class JobQueue:
             return actual_job_id
         finally:
             conn.close()
+
+    # Alias for API compatibility
+    enqueue_job = enqueue
 
     def dequeue(self) -> Optional[ClipJob]:
         """

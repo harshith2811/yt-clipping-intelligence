@@ -160,5 +160,86 @@ class DatabaseManager:
                 )
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_dlq_status ON webhook_dlq(status, next_retry_at);")
 
+                # 8. Discovered Uploads Table (Real-time Pinger & Scraper Ingestion)
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS discovered_uploads (
+                        video_id TEXT PRIMARY KEY,
+                        channel_id TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        published_at TEXT NOT NULL,
+                        discovered_at TEXT NOT NULL,
+                        initial_views INTEGER DEFAULT 0,
+                        latest_views INTEGER DEFAULT 0,
+                        hourly_velocity REAL DEFAULT 0.0,
+                        velocity_multiplier REAL DEFAULT 0.0,
+                        virality_classification TEXT DEFAULT 'STEADY',
+                        like_ratio REAL DEFAULT 0.0,
+                        comment_ratio REAL DEFAULT 0.0,
+                        status TEXT DEFAULT 'DISCOVERED',
+                        attribution_text TEXT,
+                        source_url TEXT,
+                        created_at TEXT NOT NULL,
+                        FOREIGN KEY(channel_id) REFERENCES monitored_channels(channel_id)
+                    )
+                    """
+                )
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_uploads_velocity ON discovered_uploads(velocity_multiplier DESC);")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_uploads_status ON discovered_uploads(status);")
+
+                # 9. Velocity Snapshots Table (Early-Hour Velocity Tracking)
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS velocity_snapshots (
+                        snapshot_id TEXT PRIMARY KEY,
+                        video_id TEXT NOT NULL,
+                        timestamp TEXT NOT NULL,
+                        age_hours REAL NOT NULL,
+                        view_count INTEGER NOT NULL,
+                        like_count INTEGER DEFAULT 0,
+                        comment_count INTEGER DEFAULT 0,
+                        hourly_velocity REAL NOT NULL,
+                        velocity_multiplier REAL NOT NULL,
+                        classification TEXT NOT NULL,
+                        source TEXT DEFAULT 'rss_pinger'
+                    )
+                    """
+                )
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_vsnaps_vid_ts ON velocity_snapshots(video_id, timestamp);")
+
+                # 10. Creator Permissions & Attribution Policies
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS creator_permissions (
+                        channel_id TEXT PRIMARY KEY,
+                        channel_name TEXT NOT NULL,
+                        policy_type TEXT NOT NULL,
+                        attribution_template TEXT,
+                        allowed_commercial INTEGER DEFAULT 1,
+                        disclaimer_required INTEGER DEFAULT 1,
+                        notes TEXT,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+                # Schema migration helper: ensure monitored_channels has policy and etag columns
+                try:
+                    conn.execute("ALTER TABLE monitored_channels ADD COLUMN clipping_policy TEXT DEFAULT 'OPEN_AFFILIATE'")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE monitored_channels ADD COLUMN etag TEXT")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE monitored_channels ADD COLUMN last_modified TEXT")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    conn.execute("ALTER TABLE monitored_channels ADD COLUMN paused INTEGER DEFAULT 0")
+                except sqlite3.OperationalError:
+                    pass
+
         finally:
             conn.close()
