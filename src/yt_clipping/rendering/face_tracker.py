@@ -98,8 +98,33 @@ class FaceFocusedFramer:
         if center_x % 2 != 0:
             center_x -= 1
 
-        # Sample at most 6 representative frames across the clip window for high-speed tracking
-        num_samples = max(min(int(duration_seconds * self.sample_fps), 6), 3)
+        # 1. Detect scene shot boundaries across the clip window
+        scene_cuts = [0.0]
+        if duration_seconds >= 2.0:
+            step_cut = max(1, int(fps * 0.20))  # sample 5 times per sec
+            start_f = int(start_seconds * fps)
+            end_f = int((start_seconds + duration_seconds) * fps)
+            prev_h = None
+            for f_idx in range(start_f, end_f, step_cut):
+                cap.set(cv2.CAP_PROP_POS_FRAMES, f_idx)
+                ret_c, frame_c = cap.read()
+                if not ret_c or frame_c is None:
+                    break
+                gray_c = cv2.cvtColor(frame_c, cv2.COLOR_BGR2GRAY)
+                hist_c = cv2.calcHist([gray_c], [0], None, [32], [0, 256])
+                cv2.normalize(hist_c, hist_c)
+                if prev_h is not None:
+                    corr = cv2.compareHist(prev_h, hist_c, cv2.HISTCMP_CORREL)
+                    if corr < 0.65:
+                        t_rel = round((f_idx - start_f) / fps, 2)
+                        if t_rel - scene_cuts[-1] >= 0.5:
+                            scene_cuts.append(t_rel)
+                prev_h = hist_c
+            if scene_cuts[-1] < duration_seconds - 0.2:
+                scene_cuts.append(round(duration_seconds, 2))
+
+        # Sample representative frames across shots or clip window
+        num_samples = max(min(int(duration_seconds * self.sample_fps), 48), 3)
         step_seconds = duration_seconds / max(num_samples, 1)
 
         detected_x_positions: List[float] = []
@@ -212,7 +237,32 @@ class FaceFocusedFramer:
 
         # Check for dynamic camera shot switch across the window
         dynamic_crop_filter = None
-        if len(time_positions) >= 2:
+        if len(scene_cuts) >= 3 and len(time_positions) >= 2:
+            # Multi-shot piecewise framing
+            shot_crops = []
+            for s_idx in range(len(scene_cuts) - 1):
+                t_s = scene_cuts[s_idx]
+                t_e = scene_cuts[s_idx + 1]
+                pts = [x for t_pos, x in time_positions if t_s <= t_pos <= t_e]
+                if pts:
+                    sx = int(np.median(pts))
+                else:
+                    sx = median_x
+                sx = sx if sx % 2 == 0 else max(0, sx - 1)
+                sx = max(0, min(sx, src_w - crop_w))
+                shot_crops.append((t_s, t_e, sx))
+
+            # Build nested if expression if there is variation across shots
+            min_x = min(x for _, _, x in shot_crops)
+            max_x = max(x for _, _, x in shot_crops)
+            if (max_x - min_x) >= (src_w * 0.10):
+                expr = str(shot_crops[-1][2])
+                for k in range(len(shot_crops) - 2, -1, -1):
+                    t_bound = shot_crops[k][1]
+                    x_val = shot_crops[k][2]
+                    expr = f"if(lt(t,{t_bound:.2f}),{x_val},{expr})"
+                dynamic_crop_filter = f"crop={crop_w}:{crop_h}:'{expr}':0"
+        elif len(time_positions) >= 2:
             first_half = [x for t_pos, x in time_positions if t_pos < duration_seconds * 0.5]
             second_half = [x for t_pos, x in time_positions if t_pos >= duration_seconds * 0.5]
             if first_half and second_half:
@@ -220,7 +270,6 @@ class FaceFocusedFramer:
                 med2 = int(np.median(second_half))
                 med1 = med1 if med1 % 2 == 0 else max(0, med1 - 1)
                 med2 = med2 if med2 % 2 == 0 else max(0, med2 - 1)
-                # If there is a distinct cut (> 20% width difference), build time-varying filter
                 if abs(med2 - med1) >= (src_w * 0.20):
                     cut_t = duration_seconds * 0.5
                     dynamic_crop_filter = f"crop={crop_w}:{crop_h}:'if(lt(t,{cut_t:.2f}),{med1},{med2})':0"
