@@ -14,12 +14,15 @@ from ..contracts.interfaces import HighlightScorer
 HOOK_KEYWORDS = {
     "secret", "never", "why", "how to", "most", "mistake", "truth", "revealed",
     "insane", "stop", "here is", "don't", "shocking", "game changer", "formula",
-    "fail", "proven", "hack", "trick", "worst", "best", "warning"
+    "fail", "proven", "hack", "trick", "worst", "best", "warning", "look at",
+    "they said", "turns out", "fun fact", "imagine",
 }
 
 PAYOFF_KEYWORDS = {
     "actually", "instead", "turns out", "that is why", "the reason is", "solution",
-    "key takeaway", "result", "finally", "realized", "in fact", "ultimately", "remember"
+    "key takeaway", "result", "finally", "realized", "in fact", "ultimately", "remember",
+    "changes everything", "blow your mind", "my take", "at the end of the day", "the bottom line",
+    "makes a big difference", "worth it", "completely", "that's why", "that is how",
 }
 
 SPONSOR_KEYWORDS = {
@@ -128,9 +131,17 @@ class ExplainableScorecardScorer(HighlightScorer):
         # 3. Coherence Score (0 to 10)
         coherence_score = 5.0
         # Check start capitalization and avoid dangling connectors
-        dangling_starts = ["and", "or", "but", "so", "because", "then", "which", "he", "she", "they"]
+        dangling_starts = ["and", "or", "so", "because", "then", "which", "he", "she", "uh", "um", "like"]
+        is_they_hook = words and words[0].lower() == "they" and any(text_lower.startswith(th) for th in ["they said", "they told", "they warned", "they wouldn't", "they didn't", "they never"])
+        is_but_hook = words and words[0].lower() == "but" and any(text_lower.startswith(bh) for bh in ["but actually", "but wait", "but here's", "but why", "but the truth"])
+
         if words and words[0].lower() in dangling_starts:
             coherence_score -= 3.0
+        elif words and words[0].lower() == "they" and not is_they_hook:
+            coherence_score -= 3.0
+        elif words and words[0].lower() == "but" and not is_but_hook:
+            coherence_score -= 3.0
+
         if text and text[0].isupper():
             coherence_score += 2.5
         if text and text[-1] in [".", "!", "?"]:
@@ -172,6 +183,14 @@ class ExplainableScorecardScorer(HighlightScorer):
             pacing_score = 5.5
         else:
             pacing_score = 3.5
+
+        # If candidate was discovered by ArcDetector, blend its granular arc metrics
+        if candidate.candidate_id.startswith("cand-arc-") and candidate.breakdown:
+            arc_bd = candidate.breakdown
+            hook_score = max(hook_score, arc_bd.hook_score)
+            moment_score = max(moment_score, arc_bd.moment_score)
+            coherence_score = max(coherence_score, arc_bd.coherence_score)
+            pacing_score = max(pacing_score, arc_bd.pacing_score)
 
         # 5. Audience Retention / Replay Heatmap Score (0 to 10)
         heatmap_score = 0.0

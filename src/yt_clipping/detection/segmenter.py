@@ -24,11 +24,14 @@ class ContextAwareSegmenter(HighlightDetector):
         default_max_duration: float = 60.0,
         target_duration: Optional[float] = None,
         dynamic_windowing: bool = True,
+        use_arc_detector: bool = True,
     ):
         self.default_min_duration = default_min_duration
         self.default_max_duration = default_max_duration
         self.target_duration = target_duration
         self.dynamic_windowing = dynamic_windowing
+        self.use_arc_detector = use_arc_detector
+        self._arc_detector = None
 
     def _normalize_segments(self, segments: List[TranscriptSegment], max_dur: float) -> List[TranscriptSegment]:
         """Splits any oversized transcript segments into manageable duration chunks."""
@@ -329,69 +332,100 @@ class ContextAwareSegmenter(HighlightDetector):
                     if cand.validate_bounds(media_limit):
                         raw_candidates.append(cand)
 
+        # Feature: Arc-First Discovery (Strong Start, Strong End)
+        arc_candidates: List[HighlightCandidate] = []
+        if self.use_arc_detector and self.dynamic_windowing and not self.target_duration:
+            try:
+                from .arc_detector import ArcDetector
+                if self._arc_detector is None:
+                    self._arc_detector = ArcDetector(
+                        default_min_duration=self.default_min_duration,
+                        default_max_duration=self.default_max_duration,
+                    )
+                arc_candidates = self._arc_detector.discover_arcs(
+                    transcript=transcript,
+                    min_duration=min_dur,
+                    max_duration=max_dur,
+                    heatmap=heatmap,
+                    deduplicate=False,
+                )
+                if arc_candidates:
+                    raw_candidates.extend(arc_candidates)
+            except Exception:
+                pass
+
+        # If arc candidates were found, we do not need the brute-force sliding window
+        # unless explicit target_duration is requested or dynamic_windowing is False
+        should_run_sliding_window = (
+            not arc_candidates
+            or self.target_duration is not None
+            or not self.dynamic_windowing
+        )
+
         n = len(segments)
 
-        # Slide through segments to find coherent windows
-        for i in range(n):
-            start_seg = segments[i]
-            cand_start = start_seg.start
-            text_parts = [start_seg.text]
+        # Slide through segments to find coherent windows (fallback or fixed-target path)
+        if should_run_sliding_window:
+            for i in range(n):
+                start_seg = segments[i]
+                cand_start = start_seg.start
+                text_parts = [start_seg.text]
 
-            # Legacy single target duration behavior if dynamic_windowing is explicitly disabled
-            if not self.dynamic_windowing and self.target_duration is not None:
-                best_window = None
-                best_diff = float("inf")
+                # Legacy single target duration behavior if dynamic_windowing is explicitly disabled
+                if not self.dynamic_windowing and self.target_duration is not None:
+                    best_window = None
+                    best_diff = float("inf")
+                    for j in range(i, n):
+                        end_seg = segments[j]
+                        if j > i:
+                            text_parts.append(end_seg.text)
+                        cand_end = end_seg.end
+                        cand_dur = cand_end - cand_start
+                        if cand_dur >= min_dur and cand_dur <= max_dur:
+                            ends_sentence = end_seg.text.strip().endswith((".", "!", "?"))
+                            diff = abs(cand_dur - self.target_duration)
+                            effective_diff = diff if ends_sentence else diff + 10.0
+                            if effective_diff < best_diff:
+                                best_diff = effective_diff
+                                best_window = (cand_start, cand_end, cand_dur, list(text_parts))
+                            if cand_dur >= self.target_duration and ends_sentence:
+                                break
+                        elif cand_dur > max_dur:
+                            break
+                    if best_window:
+                        self._create_and_append_candidate(best_window, transcript, raw_candidates)
+                    continue
+
+                # Dynamic Windowing: Discover all complete semantic thought units bounded to sentence endings or natural speech pauses
+                has_emitted_thought = False
+                last_valid_window = None
                 for j in range(i, n):
                     end_seg = segments[j]
                     if j > i:
                         text_parts.append(end_seg.text)
+
                     cand_end = end_seg.end
                     cand_dur = cand_end - cand_start
+
                     if cand_dur >= min_dur and cand_dur <= max_dur:
                         ends_sentence = end_seg.text.strip().endswith((".", "!", "?"))
-                        diff = abs(cand_dur - self.target_duration)
-                        effective_diff = diff if ends_sentence else diff + 10.0
-                        if effective_diff < best_diff:
-                            best_diff = effective_diff
-                            best_window = (cand_start, cand_end, cand_dur, list(text_parts))
-                        if cand_dur >= self.target_duration and ends_sentence:
-                            break
+                        has_pause = (j < n - 1 and (segments[j + 1].start - end_seg.end) >= 0.5)
+
+                        if ends_sentence or has_pause:
+                            self._create_and_append_candidate(
+                                (cand_start, cand_end, cand_dur, list(text_parts)),
+                                transcript,
+                                raw_candidates,
+                            )
+                            has_emitted_thought = True
+
+                        last_valid_window = (cand_start, cand_end, cand_dur, list(text_parts))
                     elif cand_dur > max_dur:
                         break
-                if best_window:
-                    self._create_and_append_candidate(best_window, transcript, raw_candidates)
-                continue
 
-            # Dynamic Windowing: Discover all complete semantic thought units bounded to sentence endings or natural speech pauses
-            has_emitted_thought = False
-            last_valid_window = None
-            for j in range(i, n):
-                end_seg = segments[j]
-                if j > i:
-                    text_parts.append(end_seg.text)
-
-                cand_end = end_seg.end
-                cand_dur = cand_end - cand_start
-
-                if cand_dur >= min_dur and cand_dur <= max_dur:
-                    ends_sentence = end_seg.text.strip().endswith((".", "!", "?"))
-                    has_pause = (j < n - 1 and (segments[j + 1].start - end_seg.end) >= 0.5)
-
-                    if ends_sentence or has_pause:
-                        self._create_and_append_candidate(
-                            (cand_start, cand_end, cand_dur, list(text_parts)),
-                            transcript,
-                            raw_candidates,
-                        )
-                        has_emitted_thought = True
-
-                    last_valid_window = (cand_start, cand_end, cand_dur, list(text_parts))
-                elif cand_dur > max_dur:
-                    break
-
-            # Fallback for unpunctuated continuous segments
-            if not has_emitted_thought and last_valid_window:
-                self._create_and_append_candidate(last_valid_window, transcript, raw_candidates)
+                # Fallback for unpunctuated continuous segments
+                if not has_emitted_thought and last_valid_window:
+                    self._create_and_append_candidate(last_valid_window, transcript, raw_candidates)
 
         if not deduplicate:
             return raw_candidates
