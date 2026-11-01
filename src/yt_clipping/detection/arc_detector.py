@@ -58,6 +58,7 @@ RHETORICAL_CLOSING_PATTERNS = (
     "do you think", "will you", "should you", "can you",
 )
 from .dedupe import suppress_overlapping_candidates
+from .audio_energy import AudioEnergyAnalyzer, MotionEnergyAnalyzer, AdaptiveCadenceScorer
 
 
 class ArcDetector:
@@ -71,10 +72,20 @@ class ArcDetector:
         classifier: Optional[SentenceClassifier] = None,
         default_min_duration: float = 15.0,
         default_max_duration: float = 60.0,
+        audio_analyzer: Optional[Any] = None,
+        motion_analyzer: Optional[Any] = None,
+        media_path: Optional[str] = None,
     ):
         self.classifier = classifier or SentenceClassifier()
         self.default_min_duration = default_min_duration
         self.default_max_duration = default_max_duration
+        self.audio_analyzer = audio_analyzer
+        self.motion_analyzer = motion_analyzer
+        self.media_path = media_path
+        if self.audio_analyzer is None and media_path is not None:
+            self.audio_analyzer = AudioEnergyAnalyzer(media_path=media_path)
+        if self.motion_analyzer is None and media_path is not None:
+            self.motion_analyzer = MotionEnergyAnalyzer(video_path=media_path)
 
     def discover_arcs(
         self,
@@ -83,6 +94,9 @@ class ArcDetector:
         max_duration: Optional[float] = None,
         heatmap: Optional[HeatmapData] = None,
         deduplicate: bool = True,
+        audio_analyzer: Optional[Any] = None,
+        motion_analyzer: Optional[Any] = None,
+        media_path: Optional[str] = None,
     ) -> List[HighlightCandidate]:
         """
         Discovers complete narrative arcs within duration bounds.
@@ -98,6 +112,17 @@ class ArcDetector:
         if not classified_sentences:
             return []
 
+        # Ground acoustic, motion, and cadence analyzers
+        eff_audio_analyzer = audio_analyzer or self.audio_analyzer
+        eff_motion_analyzer = motion_analyzer or self.motion_analyzer
+        eff_media_path = media_path or self.media_path
+        if eff_audio_analyzer is None and eff_media_path is not None:
+            eff_audio_analyzer = AudioEnergyAnalyzer(media_path=eff_media_path)
+        if eff_motion_analyzer is None and eff_media_path is not None:
+            eff_motion_analyzer = MotionEnergyAnalyzer(video_path=eff_media_path)
+
+        cadence_scorer = AdaptiveCadenceScorer(transcript)
+
         raw_candidates: List[HighlightCandidate] = []
         n = len(classified_sentences)
 
@@ -108,18 +133,41 @@ class ArcDetector:
             if start_sent.sentence_type == SPONSOR:
                 continue
 
-            # Hard gate 2: Reject weak dangling starters ("and", "so", "uh", "or", etc.)
-            # unless it's a high-confidence quoted line or intentional contrast hook
+            # Hard gate 2: Conversational boundary repair & dangling starter pruning
             first_word = start_sent.text.split()[0].lower().rstrip(".,!?:;") if start_sent.text.split() else ""
             is_quoted = start_sent.text.strip().startswith((">>", '"', "'"))
             lower_start = start_sent.text.lower().strip()
             is_they_hook = (first_word == "they" and any(lower_start.startswith(th) for th in PROVOCATIVE_THEY_HOOKS))
             is_but_hook = (first_word == "but" and any(lower_start.startswith(bh) for bh in CONTRAST_BUT_HOOKS))
 
-            if first_word in WEAK_OPENERS and not is_but_hook and not is_quoted and start_sent.confidence < 0.90:
-                continue
+            # Preceding acoustic pause / breath boundary
+            if i == 0:
+                silence_before = start_sent.start
+            else:
+                prev_sent = classified_sentences[i - 1]
+                silence_before = max(0.0, start_sent.start - prev_sent.end)
+            has_pause_boundary = silence_before > 0.35
+
+            if first_word in WEAK_OPENERS and not is_but_hook and not is_quoted:
+                # Allow conversational opening if preceded by acoustic pause boundary (> 0.35s)
+                # or if it exhibits clear standalone complete sentence structure
+                has_clear_structure = (
+                    start_sent.confidence >= 0.90
+                    and start_sent.sentence_type in (HOOK, REVELATION, CONTEXT)
+                    and len(start_sent.text.split()) >= 6
+                    and start_sent.text.strip().endswith((".", "!", "?"))
+                )
+                if not has_pause_boundary and not has_clear_structure:
+                    continue
             if first_word == "they" and not is_they_hook and not is_quoted:
-                continue
+                has_clear_structure = (
+                    start_sent.confidence >= 0.90
+                    and start_sent.sentence_type in (HOOK, REVELATION, CONTEXT)
+                    and len(start_sent.text.split()) >= 6
+                    and start_sent.text.strip().endswith((".", "!", "?"))
+                )
+                if not has_pause_boundary and not has_clear_structure:
+                    continue
 
             # Hard gate 3: Prefer starting on HOOK, REVELATION, or strong CONTEXT.
             # Skip pure FILLER starts.
@@ -159,6 +207,10 @@ class ArcDetector:
                             arc_sentences=arc_sentences,
                             transcript=transcript,
                             heatmap=heatmap,
+                            audio_analyzer=eff_audio_analyzer,
+                            motion_analyzer=eff_motion_analyzer,
+                            cadence_scorer=cadence_scorer,
+                            has_pause_boundary=has_pause_boundary,
                         )
                         if cand and cand.validate_bounds(transcript.duration_seconds or end_sent.end):
                             hook_candidates.append(cand)
@@ -184,6 +236,10 @@ class ArcDetector:
         arc_sentences: List[ClassifiedSentence],
         transcript: Transcript,
         heatmap: Optional[HeatmapData] = None,
+        audio_analyzer: Optional[Any] = None,
+        motion_analyzer: Optional[Any] = None,
+        cadence_scorer: Optional[AdaptiveCadenceScorer] = None,
+        has_pause_boundary: bool = False,
     ) -> Optional[HighlightCandidate]:
         """Evaluates candidate arc across multi-signal dimensions and constructs candidate."""
         w_start = start_sent.start
@@ -198,7 +254,7 @@ class ArcDetector:
         last_sentence_text = end_sent.text.strip()
 
         # 1. Hook Strength Score (0.0 - 10.0)
-        hook_score = self._score_hook_strength(start_sent)
+        hook_score = self._score_hook_strength(start_sent, has_pause_boundary=has_pause_boundary)
 
         # 2. Payoff Resolution Score (0.0 - 10.0)
         payoff_score = self._score_payoff_resolution(end_sent, full_text)
@@ -207,9 +263,21 @@ class ArcDetector:
         arc_score = self._score_arc_completeness(arc_sentences)
 
         # 4. Speech Dynamics & Pacing (0.0 - 10.0)
-        pacing_score = self._score_speech_dynamics(arc_sentences, w_dur)
+        pacing_score = self._score_speech_dynamics(arc_sentences, w_dur, cadence_scorer=cadence_scorer)
 
-        # 5. Audience Retention / Heatmap (0.0 - 10.0)
+        # 5. Acoustic Energy Score (0.0 - 10.0)
+        if audio_analyzer is not None:
+            audio_energy_score = audio_analyzer.evaluate_interval(w_start, w_end)
+        else:
+            audio_energy_score = 7.0
+
+        # 6. Visual Score (0.0 - 10.0)
+        if motion_analyzer is not None:
+            visual_score = motion_analyzer.evaluate_interval(w_start, w_end)
+        else:
+            visual_score = 8.0
+
+        # 7. Audience Retention / Heatmap (0.0 - 10.0)
         heatmap_score = 0.0
         heatmap_rationale = ""
         if heatmap:
@@ -238,14 +306,15 @@ class ArcDetector:
             moment_score=round(payoff_score, 1),
             coherence_score=round(arc_score, 1),
             pacing_score=round(pacing_score, 1),
-            audio_energy_score=7.0,
-            visual_score=8.0,
+            audio_energy_score=round(audio_energy_score, 1),
+            visual_score=round(visual_score, 1),
             heatmap_score=round(heatmap_score, 1),
             confidence=0.88,
             rationale=(
                 f"Hook={hook_score:.1f}/10 [{start_sent.sentence_type}], "
                 f"Payoff={payoff_score:.1f}/10 [{end_sent.sentence_type}], "
-                f"Arc={arc_score:.1f}/10, Dynamics={pacing_score:.1f}/10"
+                f"Arc={arc_score:.1f}/10, Dynamics={pacing_score:.1f}/10, "
+                f"Audio={audio_energy_score:.1f}/10"
                 f"{heatmap_rationale}."
             ),
         )
@@ -267,7 +336,7 @@ class ArcDetector:
             transcript_text=full_text,
         )
 
-    def _score_hook_strength(self, sent: ClassifiedSentence) -> float:
+    def _score_hook_strength(self, sent: ClassifiedSentence, has_pause_boundary: bool = False) -> float:
         """Evaluates opening sentence capture power (0.0 to 10.0)."""
         score = 4.0
         text = sent.text.strip()
@@ -307,14 +376,14 @@ class ArcDetector:
         elif sent.sentence_type == REVELATION:
             score += 1.0
 
-        # Weak dangling opener penalty
+        # Weak dangling opener penalty (mitigated by acoustic pause boundary)
         is_they_hook = (first_word == "they" and any(lower.startswith(th) for th in PROVOCATIVE_THEY_HOOKS))
         is_but_hook = (first_word == "but" and any(lower.startswith(bh) for bh in CONTRAST_BUT_HOOKS))
 
         if first_word in WEAK_OPENERS and not is_but_hook:
-            score -= 3.0
+            score -= 1.0 if has_pause_boundary else 3.0
         elif first_word == "they" and not is_they_hook:
-            score -= 2.5
+            score -= 1.0 if has_pause_boundary else 2.5
 
         return max(1.0, min(10.0, score))
 
@@ -393,17 +462,40 @@ class ArcDetector:
 
         return max(1.0, min(10.0, score))
 
-    def _score_speech_dynamics(self, sentences: List[ClassifiedSentence], total_dur: float) -> float:
+    def _score_speech_dynamics(
+        self,
+        sentences: List[ClassifiedSentence],
+        total_dur: float,
+        cadence_scorer: Optional[AdaptiveCadenceScorer] = None,
+    ) -> float:
         """Evaluates pacing, tempo variance, and dramatic pauses (0.0 to 10.0)."""
         all_words: List[WordTimestamp] = []
         for s in sentences:
             if s.words:
                 all_words.extend(s.words)
 
+        if cadence_scorer and cadence_scorer.is_available and all_words:
+            base_score = cadence_scorer.score_cadence(
+                words=all_words,
+                duration=total_dur,
+                sentences=sentences,
+            )
+            # Bonus for dramatic pauses between sentences (0.35s to 1.2s gap)
+            pause_beats = 0
+            for k in range(len(sentences) - 1):
+                gap = sentences[k + 1].start - sentences[k].end
+                if 0.35 <= gap <= 1.2:
+                    pause_beats += 1
+
+            if 1 <= pause_beats <= 4:
+                base_score = min(10.0, base_score + 0.5)
+
+            return max(1.0, min(10.0, base_score))
+
         num_words = sum(len(s.text.split()) for s in sentences)
         avg_wpm = (num_words / max(total_dur, 1.0)) * 60.0
 
-        # Baseline WPM cadence scoring
+        # Baseline WPM cadence scoring fallback
         score = 6.0
         if 135.0 <= avg_wpm <= 185.0:
             score += 2.5
@@ -446,3 +538,4 @@ class ArcDetector:
             score += 1.0
 
         return max(1.0, min(10.0, score))
+

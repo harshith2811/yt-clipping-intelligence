@@ -5,10 +5,11 @@ Evaluates opening hook strength, narrative payoff, pacing (WPM), coherence,
 and produces human-auditable rationales.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Any
 import re
 from ..contracts.models import HighlightCandidate, Transcript, ScoreBreakdown, HeatmapData
 from ..contracts.interfaces import HighlightScorer
+from ..detection.audio_energy import AudioEnergyAnalyzer, MotionEnergyAnalyzer, AdaptiveCadenceScorer
 
 
 HOOK_KEYWORDS = {
@@ -49,12 +50,22 @@ class ExplainableScorecardScorer(HighlightScorer):
         llm_model: Optional[str] = None,
         use_llm: bool = False,
         timeout: int = 15,
+        audio_analyzer: Optional[Any] = None,
+        motion_analyzer: Optional[Any] = None,
+        media_path: Optional[str] = None,
     ):
         import os
         self.llm_api_base = (llm_api_base or os.getenv("LLM_API_BASE") or "").rstrip("/")
         self.llm_model = llm_model or os.getenv("LLM_MODEL", "llama3.2:1b")
         self.use_llm = use_llm
         self.timeout = timeout
+        self.audio_analyzer = audio_analyzer
+        self.motion_analyzer = motion_analyzer
+        self.media_path = media_path
+        if self.audio_analyzer is None and media_path is not None:
+            self.audio_analyzer = AudioEnergyAnalyzer(media_path=media_path)
+        if self.motion_analyzer is None and media_path is not None:
+            self.motion_analyzer = MotionEnergyAnalyzer(video_path=media_path)
 
     def _evaluate_with_llm(self, text: str) -> Optional[dict]:
         """Queries local Ollama model to verify hook crispness and detect sponsor ad contamination."""
@@ -99,6 +110,9 @@ class ExplainableScorecardScorer(HighlightScorer):
         candidate: HighlightCandidate,
         transcript: Transcript,
         heatmap: Optional[HeatmapData] = None,
+        audio_analyzer: Optional[Any] = None,
+        motion_analyzer: Optional[Any] = None,
+        media_path: Optional[str] = None,
     ) -> HighlightCandidate:
         text = candidate.transcript_text.strip()
         words = text.split()
@@ -172,17 +186,21 @@ class ExplainableScorecardScorer(HighlightScorer):
                     if crisp is not None:
                         llm_rationale = f", [AI Crispness={crisp}/10]"
 
-        # 4. Pacing Score (0 to 10) based on Words Per Minute (WPM)
+        # 4. Pacing Score (0 to 10) based on relative cadence deviation or fallback WPM
         wpm = (num_words / duration) * 60.0
-        # Optimal vertical short cadence is ~140-180 WPM
-        if 135.0 <= wpm <= 185.0:
-            pacing_score = 9.5
-        elif 110.0 <= wpm < 135.0 or 185.0 < wpm <= 210.0:
-            pacing_score = 7.5
-        elif 90.0 <= wpm < 110.0 or 210.0 < wpm <= 240.0:
-            pacing_score = 5.5
+        cadence_scorer = AdaptiveCadenceScorer(transcript)
+        if cadence_scorer.is_available:
+            pacing_score = cadence_scorer.score_candidate_cadence(candidate, transcript)
         else:
-            pacing_score = 3.5
+            # Optimal vertical short cadence is ~140-180 WPM fallback
+            if 135.0 <= wpm <= 185.0:
+                pacing_score = 9.5
+            elif 110.0 <= wpm < 135.0 or 185.0 < wpm <= 210.0:
+                pacing_score = 7.5
+            elif 90.0 <= wpm < 110.0 or 210.0 < wpm <= 240.0:
+                pacing_score = 5.5
+            else:
+                pacing_score = 3.5
 
         # If candidate was discovered by ArcDetector, blend its granular arc metrics
         if candidate.candidate_id.startswith("cand-arc-") and candidate.breakdown:
@@ -223,8 +241,31 @@ class ExplainableScorecardScorer(HighlightScorer):
                         heatmap_rationale = f", Heatmap={heatmap_score:.1f}/10 (Avg Retention {avg_val*100:.0f}%)"
 
         # 6. Audio Energy & Visual Score
-        audio_energy_score = 7.0  # Heuristic baseline
-        visual_score = 8.0        # Default 9:16 layout suitability
+        eff_audio_analyzer = audio_analyzer or self.audio_analyzer
+        eff_motion_analyzer = motion_analyzer or self.motion_analyzer
+        eff_media_path = media_path or self.media_path
+        if eff_audio_analyzer is None and eff_media_path is not None:
+            eff_audio_analyzer = AudioEnergyAnalyzer(media_path=eff_media_path)
+        if eff_motion_analyzer is None and eff_media_path is not None:
+            eff_motion_analyzer = MotionEnergyAnalyzer(video_path=eff_media_path)
+
+        if eff_audio_analyzer is not None:
+            audio_energy_score = eff_audio_analyzer.evaluate_interval(
+                candidate.start_seconds, candidate.end_seconds
+            )
+        elif candidate.breakdown and candidate.breakdown.audio_energy_score > 0.0:
+            audio_energy_score = candidate.breakdown.audio_energy_score
+        else:
+            audio_energy_score = 7.0  # Heuristic baseline fallback
+
+        if eff_motion_analyzer is not None:
+            visual_score = eff_motion_analyzer.evaluate_interval(
+                candidate.start_seconds, candidate.end_seconds
+            )
+        elif candidate.breakdown and candidate.breakdown.visual_score > 0.0:
+            visual_score = candidate.breakdown.visual_score
+        else:
+            visual_score = 8.0        # Default 9:16 layout suitability fallback
 
         # Confidence
         confidence = 0.85 if num_words >= 25 else 0.70
@@ -257,7 +298,18 @@ class ExplainableScorecardScorer(HighlightScorer):
         candidates: List[HighlightCandidate],
         transcript: Transcript,
         heatmap: Optional[HeatmapData] = None,
+        audio_analyzer: Optional[Any] = None,
+        motion_analyzer: Optional[Any] = None,
+        media_path: Optional[str] = None,
     ) -> List[HighlightCandidate]:
         """Scores all candidates and sorts descending by composite score."""
-        scored = [self.score_candidate(c, transcript, heatmap=heatmap) for c in candidates]
+        scored = [
+            self.score_candidate(
+                c, transcript, heatmap=heatmap,
+                audio_analyzer=audio_analyzer, motion_analyzer=motion_analyzer,
+                media_path=media_path,
+            )
+            for c in candidates
+        ]
         return sorted(scored, key=lambda c: c.score, reverse=True)
+
