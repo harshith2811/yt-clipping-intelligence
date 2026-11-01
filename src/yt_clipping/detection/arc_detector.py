@@ -170,8 +170,8 @@ class ArcDetector:
                     continue
 
             # Hard gate 3: Prefer starting on HOOK, REVELATION, or strong CONTEXT.
-            # Skip pure FILLER starts.
-            if start_sent.sentence_type == FILLER:
+            # Skip pure FILLER or SPONSOR starts.
+            if start_sent.sentence_type in (FILLER, SPONSOR):
                 continue
 
             # Scan forward to discover matching payoffs within duration window

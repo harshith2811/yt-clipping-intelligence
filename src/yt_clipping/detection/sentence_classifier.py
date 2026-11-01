@@ -25,8 +25,10 @@ SPONSOR = "SPONSOR"
 SPONSOR_PHRASES = frozenset({
     "sponsor", "sponsored", "use code", "link in description", "discount",
     "percent off", "patreon", "merch", "displate", "nordvpn", "expressvpn",
-    "audible", "skillshare", "squarespace", "brilliant.org", "curiositystream",
-    "surfshark", "dashlane", "lastpass", "raid shadow legends", "buy now",
+    "audible", "skillshare", "squarespace", "shopify", "betterhelp",
+    "brilliant.org", "curiositystream", "surfshark", "dashlane", "lastpass",
+    "raid shadow legends", "buy now", "promo code", "free trial", "sign up today",
+    "check out the link", "thanks to our", "thank you to our",
 })
 
 HOOK_QUESTION_WORDS = frozenset({
