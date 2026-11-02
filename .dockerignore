@@ -1,0 +1,48 @@
+# ==============================================================================
+# Docker Build Ignore Configuration
+# Prevents large runtime media, test caches, local environments, and secrets
+# from being transferred to the Docker daemon build context.
+# ==============================================================================
+
+# Version control & agent metadata
+.git
+.gitignore
+.gitattributes
+.github
+.agents
+
+# Python bytecode and type caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environment secrets and overrides
+.env
+.env.*
+!.env.example
+
+# Durable runtime media, cache, and SQLite databases (mount via volume instead)
+data/
+data/*
+!data/.gitkeep
+
+# Temporary and log files
+*.log
+*.tmp
+*.mp4
+*.wav
+*.ass
+*.png
+*.jpg
+*.jpeg
+
+# IDE & OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

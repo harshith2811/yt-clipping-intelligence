@@ -1,0 +1,7 @@
+# Enforce Unix LF line endings for shell scripts and Docker entrypoints
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
+Dockerfile text eol=lf
+
+# Auto-detect text files and normalize line endings
+* text=auto
