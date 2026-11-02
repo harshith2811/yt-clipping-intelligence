@@ -131,7 +131,12 @@ def test_omnipost_preflight_success():
         assert res["readyToPublish"] == ["youtube", "instagram"]
         mock_get.assert_called_once_with(
             "http://localhost:3300/api/engine/preflight",
-            headers={"Accept": "application/json", "x-api-key": "secret123"},
+            headers={
+                "Accept": "application/json",
+                "x-api-key": "secret123",
+                "x-admin-key": "secret123",
+                "Authorization": "Bearer secret123",
+            },
             timeout=10,
         )
 

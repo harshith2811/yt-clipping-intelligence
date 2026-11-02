@@ -70,6 +70,8 @@ class OmniPostPublisher(HandoffPublisher):
         headers = {"Accept": "application/json"}
         if self.api_key:
             headers["x-api-key"] = self.api_key
+            headers["x-admin-key"] = self.api_key
+            headers["Authorization"] = f"Bearer {self.api_key}"
         try:
             resp = requests.get(url, headers=headers, timeout=10)
             if resp.status_code == 200:
@@ -167,6 +169,8 @@ class OmniPostPublisher(HandoffPublisher):
         headers = {}
         if self.api_key:
             headers["x-api-key"] = self.api_key
+            headers["x-admin-key"] = self.api_key
+            headers["Authorization"] = f"Bearer {self.api_key}"
 
         upload_url = f"{self.base_url}/api/upload"
 
