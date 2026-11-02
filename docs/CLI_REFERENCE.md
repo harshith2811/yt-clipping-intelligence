@@ -214,12 +214,17 @@ yt-clip daemon --interval 300 --max-iterations 10
 
 ---
 
-#### `queue`: Priority Job Queue Telemetry
+#### `queue`: Priority Job Queue Telemetry & 24/7 Worker
 ```bash
+# Check queue status and worker lease state
 yt-clip queue status --db data/jobs.db
+
+# Launch 24/7 continuous background queue worker
+yt-clip queue worker --db data/jobs.db --poll-interval 5.0
 ```
 **Subcommands:**
 - `queue status`: Displays active queue size, priority breakdown, and worker lease status.
+- `queue worker`: Continuous 24/7 worker process leasing and executing pending clipping jobs. Options: `--db` (default: `data/jobs.db`), `--poll-interval` (default: `5.0`), `--max-jobs` (optional exit limit), `--output-dir` (default: `data/rendered_clips`).
 
 ---
 

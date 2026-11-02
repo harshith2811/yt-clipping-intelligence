@@ -1,7 +1,9 @@
 # YouTube Clipping Intelligence Platform
 
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue?logo=python)](https://python.org)
-[![Pytest](https://img.shields.io/badge/Tests-428%20Passed-brightgreen?logo=pytest)](docs/COMPREHENSIVE_TEST_REPORT.md)
+[![Pytest](https://img.shields.io/badge/Tests-439%20Passed-brightgreen?logo=pytest)](docs/COMPREHENSIVE_TEST_REPORT.md)
+[![Docker](https://img.shields.io/badge/Docker-24%2F7%20GPU%20Worker-blue?logo=docker)](Dockerfile)
+[![Social Publishing](https://img.shields.io/badge/Publishing-OmniPost%20Multi--Channel-purple)](src/yt_clipping/publisher/omnipost.py)
 [![MCP](https://img.shields.io/badge/MCP-2024--11--05%20Stdio%20JSON--RPC-purple)](docs/mcp.md)
 [![Hardware](https://img.shields.io/badge/Hardware-%E2%89%A44GB%20VRAM%20%7C%20CPU%20Fallback-orange)](docs/RELEASE_READINESS_REPORT.md)
 [![Zero Quota](https://img.shields.io/badge/YouTube%20Discovery-Zero%20API%20Quota-red?logo=youtube)](docs/VIRALITY_AND_ATTRIBUTION.md)
@@ -430,18 +432,68 @@ yt-clipping-intelligence/
     ├── test_mcp_server.py
     ├── test_outlier_multiplier.py
     ├── test_outro_card.py
+    ├── test_omnipost_publisher.py
+    ├── test_docker_and_prebake.py
     ├── test_pacing_polish.py
     ├── test_packaging_linter.py
     ├── test_pinger_and_virality_scraper.py
     ├── test_pipeline_deadair_broll.py
     ├── test_podcast_engine.py
     ├── test_trajectory_optimizer.py
-    └── ... (428 tests total)
+    └── ... (439 tests total)
 ```
 
 ---
 
-## 9. Testing & Quality Assurance
+## 9. 24/7 Cloud Worker Deployment (Docker & GPU Ready)
+
+Deploy the autonomous clipping engine 24/7 on GPU cloud servers (RunPod, Lambda Labs, AWS EC2 g4dn/g5, GCP T4/A100) or headless Linux nodes.
+
+### 🐳 Key Container Features:
+- **NVIDIA CUDA 12.4 + NVENC**: Full hardware-accelerated video decoding, active-speaker facial tracking, and 60fps vertical H.264 rendering.
+- **100% Pre-Baked AI Models**: Pre-bakes Faster-Whisper (`base` and `small`), OpenCV YuNet, and Ultralytics YOLOv8 segmentation weights during Docker build—zero cold-start lag or runtime download failures.
+- **Durable Persistent Storage**: Binds `./data` volume preserving SQLite jobs ledger (`jobs.db`), rights policy, and rendered MP4 artifacts across container restarts.
+- **Auto-Healing Daemon**: Managed by `docker-entrypoint.sh` with graceful signal handling (`SIGTERM`, `SIGINT`) and Docker healthcheck probes (`python -m yt_clipping doctor`).
+
+### 🚀 1-Click Launch with Docker Compose:
+
+```bash
+# Standard Launch (CPU / Auto Fallback)
+docker compose up -d --build
+
+# Dedicated Cloud GPU Server Launch (NVIDIA Hardware Acceleration)
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+
+# Inspect 24/7 Daemon Logs
+docker compose logs -f clipping-daemon
+
+# Run MCP Server Container
+docker compose run --rm -p 8000:8000 clipping-daemon mcp
+```
+
+---
+
+## 10. Direct Social Media Publishing (OmniPost Integration)
+
+Seamlessly distribute rendered vertical shorts to **YouTube Shorts**, **Instagram Reels**, **Facebook Reels**, and **LinkedIn** via the integrated OmniPost adapter:
+
+```bash
+# Clip and deliver directly to OmniPost publishing engine
+yt-clip run --video-id rsOiZE19RVo \
+  --enable-outro-card \
+  --outro-channel-name "Veritasium" \
+  --autopost-mode omnipost \
+  --omnipost-url "http://localhost:3300" \
+  --omnipost-key "YOUR_SECRET_KEY" \
+  --omnipost-platforms "youtube,instagram,facebook"
+
+# Dry-run simulate publishing without posting
+yt-clip run --video-id rsOiZE19RVo --autopost-mode omnipost --dry-run
+```
+
+---
+
+## 11. Testing & Quality Assurance
 
 Run the comprehensive test suite:
 ```bash
@@ -449,13 +501,13 @@ pytest
 ```
 
 **Quality Assurance Metrics:**
-- **425 Passing Tests:** 100% pass rate across functional baseline, unit, integration, stress, and adversarial suites (425 passed, 0 failed, 0 xfailed, 0 skipped out of 425 collected items in ~92s).
+- **439 Passing Tests:** 100% pass rate across functional baseline, unit, integration, stress, and adversarial suites (439 passed, 0 failed, 0 xfailed, 0 skipped out of 439 collected items).
 - **Strict Regression Invariance:** All baseline tests maintain complete functional parity with full local autonomy.
 - **Hardware Boundary Verification:** Full test execution verified locally on Windows, Python 3.12, CUDA active, $\le 4\text{GB}$ VRAM constraints with automated CPU fallbacks.
 
 ---
 
-## 10. Documentation & Technical Specifications
+## 12. Documentation & Technical Specifications
 
 - [**System Mental Map & Reference Architecture**](docs/SYSTEM_MENTAL_MAP.md)
 - [**Documentation Portal (Master Index)**](docs/README.md)

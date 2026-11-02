@@ -9,6 +9,7 @@ Unit tests for OutlierMultiplier:
 """
 
 import pytest
+from datetime import datetime
 from src.yt_clipping.contracts.models import VideoCandidate, CreatorSource
 from src.yt_clipping.discovery.outlier import (
     OutlierMultiplier,
@@ -159,7 +160,8 @@ def test_public_metric_ranker_integration():
     )
 
     channel_views = [8000, 10000, 10000, 12000]  # Median = 10,000 -> 3.0x multiple
-    score = ranker.compute_discovery_score(cand, creator, channel_views=channel_views)
+    as_of = datetime.fromisoformat(cand.retrieved_at.replace("Z", "+00:00"))
+    score = ranker.compute_discovery_score(cand, creator, as_of=as_of, channel_views=channel_views)
     assert score > 60.0
     assert "Outlier=" in cand.discovery_rationale
     assert "median breakout" in cand.discovery_rationale

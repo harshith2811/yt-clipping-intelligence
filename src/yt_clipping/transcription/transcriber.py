@@ -136,7 +136,9 @@ class LocalTranscriber(Transcriber):
                 pass
             from faster_whisper import WhisperModel
             start_t = time.time()
-            model = WhisperModel(self.model_size, device=device, compute_type=compute_type)
+            models_whisper_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../models/whisper"))
+            download_root = os.environ.get("WHISPER_DOWNLOAD_ROOT") or (models_whisper_dir if os.path.exists(models_whisper_dir) else None)
+            model = WhisperModel(self.model_size, device=device, compute_type=compute_type, download_root=download_root)
             segments_raw, info = model.transcribe(media_path, word_timestamps=True)
 
             segments: List[TranscriptSegment] = []

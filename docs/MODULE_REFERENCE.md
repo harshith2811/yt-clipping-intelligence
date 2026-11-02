@@ -342,6 +342,15 @@ Abstract Base Classes (ABCs) and exceptions:
   - Modes:
     1. `watched_folder`: Atomic local handoff moving video MP4, sidecar JSON metadata, and subtitle files into target delivery folder.
     2. `webhook`: HMAC-SHA256 signed HTTP REST webhook dispatch with retry policy and dead-letter queue (DLQ) logging.
+    3. `omnipost`: Direct multi-platform publishing via OmniPost social media engine.
+
+### `omnipost.py`
+- **Class `OmniPostPublisher` (implements `HandoffPublisher`):**
+  - Direct adapter interfacing with OmniPost social media automation engine (`http://localhost:3300`).
+  - Gated delivery enforcing rights status and QA verification before dispatch.
+  - Supports multipart video upload (`/api/upload`) and scheduled publishing across YouTube Shorts, Instagram Reels, Facebook Reels, and LinkedIn.
+  - Method `preflight_check()`: Verifies server health and active publishing channel inventory.
+  - Method `publish_clip(rendered_clip, candidate, rights_manifest, qa_report, dry_run=False)`: Atomically dispatches clip and returns `HandoffReceipt`.
 
 ---
 

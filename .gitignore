@@ -95,6 +95,7 @@ data/*.sqlite3
 
 # --- Machine Learning Models, Checkpoints & Weights ---
 weights/
+models/whisper/
 models/*.pt
 models/*.pth
 models/*.bin

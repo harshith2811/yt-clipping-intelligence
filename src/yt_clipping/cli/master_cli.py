@@ -10,6 +10,7 @@ import os
 import json
 import shutil
 import subprocess
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
@@ -57,6 +58,9 @@ def build_pipeline(
     db_path: str = "data/jobs.db",
     min_duration: float = 15.0,
     max_duration: float = 60.0,
+    autopost_mode: str = "watched_folder",
+    webhook_url: Optional[str] = None,
+    auth_token: Optional[str] = None,
 ) -> ClippingPipeline:
     cfg = AppConfig()
     rights_policy = LocalRightsPolicy(ledger_path, db_path=db_path)
@@ -66,7 +70,13 @@ def build_pipeline(
     scorer = ExplainableScorecardScorer()
     renderer = FFmpegRenderer()
     verifier = MediaQualityVerifier()
-    publisher = DualModeAutopostPublisher(mode="watched_folder", watched_dir=autopost_inbox, db_path=db_path)
+    publisher = DualModeAutopostPublisher(
+        mode=autopost_mode,
+        watched_dir=autopost_inbox,
+        webhook_url=webhook_url,
+        auth_token=auth_token,
+        db_path=db_path,
+    )
     journal = JobJournal(db_path)
     metadata_generator = MetadataGenerator(
         llm_api_base=cfg.llm_api_base,
@@ -129,10 +139,16 @@ def cmd_run(args: argparse.Namespace) -> None:
 
     min_dur = getattr(args, "min_duration", 15.0)
     max_dur = getattr(args, "max_duration", 60.0)
+    autopost_mode = getattr(args, "autopost_mode", "watched_folder")
+    omni_url = getattr(args, "omnipost_url", None) or getattr(args, "webhook_url", None)
+    omni_key = getattr(args, "omnipost_key", None) or getattr(args, "auth_token", None)
     pipeline = build_pipeline(
         output_dir=getattr(args, "output_dir", "data/rendered_clips"),
         min_duration=min_dur,
         max_duration=max_dur,
+        autopost_mode=autopost_mode,
+        webhook_url=omni_url,
+        auth_token=omni_key,
     )
     vcodec = "h264_nvenc" if getattr(args, "gpu", False) else getattr(args, "vcodec", "libx264")
     sub_preset = getattr(args, "subtitle_preset", "hormozi")
@@ -830,6 +846,19 @@ def cmd_queue(args: argparse.Namespace) -> None:
             print("\nRecent Jobs:")
             for j in st["recent_jobs"]:
                 print(f"  - [{j['status']}] {j['job_id']} (video: {j['video_id']}, priority: {j['priority']}, retries: {j['retry_count']}/{j['max_retries']})")
+    elif args.queue_cmd == "worker":
+        from ..orchestration.pipeline import build_pipeline
+        pipeline = build_pipeline(
+            output_dir=getattr(args, "output_dir", "data/rendered_clips"),
+        )
+        poll_int = getattr(args, "poll_interval", 5.0)
+        max_jobs = getattr(args, "max_jobs", None)
+        print(f"[*] Starting 24/7 Job Queue Worker on {args.db} (poll_interval={poll_int}s)...")
+        queue.run_worker(
+            pipeline_runner=lambda job: pipeline.process_job(job),
+            poll_interval=poll_int,
+            max_jobs=max_jobs,
+        )
 
 
 def cmd_dlq(args: argparse.Namespace) -> None:
@@ -977,6 +1006,12 @@ def build_parser() -> argparse.ArgumentParser:
     queue_sub = p_queue.add_subparsers(dest="queue_cmd", required=True)
     p_q_stat = queue_sub.add_parser("status", help="Display job queue status and counts")
     p_q_stat.add_argument("--db", default="data/jobs.db", help="Path to SQLite jobs database")
+
+    p_q_work = queue_sub.add_parser("worker", help="Run 24/7 background job queue worker")
+    p_q_work.add_argument("--db", default="data/jobs.db", help="Path to SQLite jobs database")
+    p_q_work.add_argument("--poll-interval", type=float, default=5.0, help="Poll interval in seconds")
+    p_q_work.add_argument("--max-jobs", type=int, default=None, help="Max jobs to process before exiting (optional)")
+    p_q_work.add_argument("--output-dir", default="data/rendered_clips", help="Output directory for rendered clips")
     p_queue.set_defaults(func=cmd_queue)
 
     # DLQ command
@@ -1120,6 +1155,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--gpu", action="store_true", help="Enable NVIDIA NVENC GPU hardware acceleration")
     p_run.add_argument("--vcodec", default="libx264", choices=["libx264", "h264_nvenc", "hevc_nvenc"], help="Video encoder codec")
     p_run.add_argument("--output-dir", default="data/rendered_clips", help="Directory for rendered clips")
+    p_run.add_argument("--autopost-mode", default="watched_folder", choices=["watched_folder", "webhook", "omnipost"], help="Autopost handoff distribution mode (default: watched_folder)")
+    p_run.add_argument("--omnipost-url", default=None, help="Base URL for OmniPost social publishing engine (default: http://localhost:3300)")
+    p_run.add_argument("--omnipost-key", default=None, help="API Secret Key for OmniPost authentication")
+    p_run.add_argument("--omnipost-platforms", default="youtube,instagram", help="Target social platforms (e.g. youtube,instagram,facebook,linkedin)")
     p_run.add_argument(
         "--enable-deadair-pruning",
         action="store_true",

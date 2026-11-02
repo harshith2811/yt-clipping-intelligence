@@ -369,6 +369,15 @@ class DualModeAutopostPublisher(HandoffPublisher):
             self._persist_receipt_to_db(receipt)
             return receipt
 
+        elif self.mode == "omnipost":
+            from .omnipost import OmniPostPublisher
+            omni = OmniPostPublisher(
+                base_url=self.webhook_url or "http://localhost:3300",
+                api_key=self.auth_token,
+                db_path=self.db.db_path,
+            )
+            return omni.publish(rendered_clip, candidate, rights_manifest, qa_report, dry_run=dry_run)
+
         elif self.mode == "webhook":
             if not self.webhook_url:
                 receipt = HandoffReceipt(
@@ -455,6 +464,9 @@ class DualModeAutopostPublisher(HandoffPublisher):
             return receipt
 
         raise ValueError(f"Unknown publisher mode: {self.mode}")
+
+    # Alias for convenience
+    publish = publish_clip
 
     def list_dlq_items(self) -> List[Dict[str, Any]]:
         """Retrieves dead-letter queue records for operator inspection."""

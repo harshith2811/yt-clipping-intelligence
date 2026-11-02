@@ -10,6 +10,8 @@ from enum import Enum
 import json
 import sqlite3
 import os
+import time
+import logging
 from datetime import datetime, timezone
 
 from .db import DatabaseManager
@@ -279,3 +281,41 @@ class JobQueue:
             }
         finally:
             conn.close()
+
+    def run_worker(
+        self,
+        pipeline_runner,
+        poll_interval: float = 5.0,
+        max_jobs: Optional[int] = None,
+        stop_event: Optional[Any] = None,
+    ) -> int:
+        """
+        Runs a continuous 24/7 worker loop leasing pending jobs and executing them.
+        Returns the number of jobs successfully processed.
+        """
+        jobs_processed = 0
+        logger = logging.getLogger("yt_clipping.worker")
+        logger.info(f"[*] 24/7 Job Queue Worker started (poll_interval={poll_interval}s)")
+
+        while True:
+            if stop_event and stop_event.is_set():
+                break
+
+            job = self.dequeue()
+            if job:
+                logger.info(f"[*] Leased job {job.job_id} for video {job.video_id}")
+                try:
+                    pipeline_runner(job)
+                    self.mark_completed(job.job_id)
+                except Exception as e:
+                    logger.error(f"[!] Job {job.job_id} failed in worker: {e}")
+                    self.mark_failed_or_retry(job.job_id, str(e))
+                finally:
+                    jobs_processed += 1
+
+                if max_jobs and jobs_processed >= max_jobs:
+                    break
+            else:
+                time.sleep(poll_interval)
+
+        return jobs_processed
