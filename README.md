@@ -1,7 +1,7 @@
 # YouTube Clipping Intelligence Platform
 
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue?logo=python)](https://python.org)
-[![Pytest](https://img.shields.io/badge/Tests-415%20Passed-brightgreen?logo=pytest)](docs/COMPREHENSIVE_TEST_REPORT.md)
+[![Pytest](https://img.shields.io/badge/Tests-428%20Passed-brightgreen?logo=pytest)](docs/COMPREHENSIVE_TEST_REPORT.md)
 [![MCP](https://img.shields.io/badge/MCP-2024--11--05%20Stdio%20JSON--RPC-purple)](docs/mcp.md)
 [![Hardware](https://img.shields.io/badge/Hardware-%E2%89%A44GB%20VRAM%20%7C%20CPU%20Fallback-orange)](docs/RELEASE_READINESS_REPORT.md)
 [![Zero Quota](https://img.shields.io/badge/YouTube%20Discovery-Zero%20API%20Quota-red?logo=youtube)](docs/VIRALITY_AND_ATTRIBUTION.md)
@@ -103,6 +103,14 @@ An enterprise-grade, research-driven autonomous video discovery, audience retent
                         │ Animated CTA Pill   │
                         │ Audio Ducking       │
                         └──────────┬──────────┘
+                                   │
+                                   ▼
+                        ┌─────────────────────┐
+                        │  Outro Card Engine  │
+                        │ (Opt-In Outro MP4)  │
+                        │ Animated Subscribe  │
+                        │ Soft Zen Bell Chime │
+                        └──────────┬──────────┘
                                    │ Final Composited MP4
                                    ▼
                         ┌─────────────────────┐
@@ -174,6 +182,12 @@ In addition to autonomous pipeline execution, the platform provides a native **M
 - **Early-Hour Velocity Multiplier ($M_v$):**
   $$V_{\text{hourly}} = \frac{\text{Current Views}}{\max(\text{Age in Hours}, 0.25)}, \quad M_v = \frac{V_{\text{hourly}}}{\max(\text{Baseline}/48.0, 10.0)}$$
 - **Audience Resonance Gate:** Rejects clickbait and bot views by enforcing Like-to-View Ratio (LVR $\ge 1.2\%$) and Comment-to-View Ratio (CVR $\ge 0.03\%$).
+
+### K. Dedicated Animated Outro Card & Local Sound Synthesis
+- **Strictly Opt-In Toggle:** Managed via `RenderProfile(enable_outro_card=False)` and `--enable-outro-card` flag. Default is `False` to maintain existing rendering contracts.
+- **Local Mathematical Audio Synthesis:** Generates a mellow, broadcast-grade notification sound using pure Python standard library (`wave`, `struct`, `math`) without external sound packs or cloud audio APIs.
+- **`soft_zen` Acoustic Profile:** Pure fundamental C5 (523.25 Hz) with gentle fifth harmonic (G5) and octave decay, 30ms raised-cosine soft attack, targeting approximately -12.5 dB peak amplitude.
+- **Broadcast Call-to-Action Animation:** Animated ASS vector subscribe pill with rocking bell icon and optional blurred backdrop sampled from the main video's final frame.
 
 ---
 
@@ -296,11 +310,17 @@ yt-clip run --video-id rsOiZE19RVo --layout active_speaker --subtitle-preset hor
 # Pipeline run with lower-third animated CTA banner
 yt-clip run --video-id rsOiZE19RVo --enable-cta --cta-text "Subscribe for Part 2" --cta-style modern_pill
 
+# Pipeline run with dedicated animated outro card and soft zen chime:
+yt-clip run --video-id rsOiZE19RVo --enable-outro-card --outro-channel-name "Veritasium"
+
 # Fast preview candidate highlights without rendering
 yt-clip preview --video-id rsOiZE19RVo
 
 # Visualize crowd-sourced retention replay curve
 yt-clip heatmap --video-id rsOiZE19RVo --visual
+
+# Register content rights manifest in compliance ledger
+yt-clip rights register --video-id rsOiZE19RVo --basis OPERATOR_ASSET --owner "Veritasium"
 ```
 
 ### 🎙️ Broadcast Podcast Split-Screen Short Maker: `yt-clip podcast`
@@ -369,30 +389,35 @@ yt-clipping-intelligence/
 │   ├── adr/                        # Architecture Decision Records
 │   └── research/                   # Repository intelligence & research matrices
 │
+├── data/                           # Runtime data storage
+│   └── .gitkeep                    # Canonical directory placeholder
+│
 ├── src/yt_clipping/                # Core modular Python package
 │   ├── audio/                      # Voiceover & TTS synthesis (`tts_engine.py`)
 │   ├── cli/                        # Master CLI entry points (`master_cli.py`)
 │   ├── contracts/                  # Typed dataclasses (`models.py`) & interfaces (`interfaces.py`)
-│   ├── detection/                  # Dead-air pruner (`deadair.py`), viability, segmenter, IoU
-│   ├── discovery/                  # Pinger daemon, Heatmap analyzer, Outlier multiplier
+│   ├── detection/                  # Arc detector (`arc_detector.py`), dead-air pruner (`deadair.py`), viability, segmenter, IoU
+│   ├── discovery/                  # Pinger daemon, Heatmap analyzer, Outlier multiplier, Quota governor
+│   ├── ingestion/                  # yt-dlp downloader & stream probe (`asset_provider.py`)
 │   ├── mcp/                        # Native MCP JSON-RPC 2.0 stdio server (`server.py`)
-│   ├── orchestration/              # Resumable pipeline (`pipeline.py`), SQLite WAL journal, queue
+│   ├── orchestration/              # Resumable pipeline (`pipeline.py`), SQLite WAL journal, queue, storage
 │   ├── podcast/                    # 9:8 split-screen, diarization (`diarization.py`), shot detector
-│   ├── publisher/                  # Autopost webhook & watched folder publisher
-│   ├── qa/                         # Media quality verifier (SAR 1:1, DAR 9:16, decodability)
-│   ├── rendering/                  # FFmpeg renderer, trajectory optimizer, B-roll engine (`b_roll.py`), CTA engine (`cta_overlay.py`)
-│   ├── reporting/                  # Executive HTML diagnostic and telemetry reports
-│   ├── rights/                     # Hard RightsPolicyGate & license audit ledger
-│   ├── scoring/                    # Composite scorecard, packaging linter, Gemini provider
+│   ├── publisher/                  # Autopost webhook & watched folder publisher (`adapter.py`)
+│   ├── qa/                         # Media quality verifier (`verifier.py`: SAR 1:1, DAR 9:16, decodability)
+│   ├── rendering/                  # FFmpeg renderer, trajectory optimizer, B-roll engine (`b_roll.py`), CTA engine (`cta_overlay.py`), Outro card (`outro_card.py`)
+│   ├── reporting/                  # Executive HTML diagnostic reports (`html_report.py`)
+│   ├── rights/                     # Hard RightsPolicyGate & license audit ledger (`gate.py`)
+│   ├── scoring/                    # Multi-signal scorecard (`scorecard.py`), packaging linter, Gemini provider
 │   └── transcription/              # Faster-Whisper transcriber & WhisperX alignment (`alignment.py`)
 │
-└── tests/                          # Automated Pytest Suite (415 test cases)
+└── tests/                          # Automated Pytest Suite (428 test cases)
     ├── test_active_speaker_framer.py
     ├── test_adversarial_broll_pipeline.py
     ├── test_adversarial_gemini.py
     ├── test_adversarial_m1.py
     ├── test_adversarial_m2.py
     ├── test_alignment.py
+    ├── test_arc_detector.py
     ├── test_audio_energy.py
     ├── test_b_roll_engine.py
     ├── test_cli_and_preview.py
@@ -404,11 +429,14 @@ yt-clipping-intelligence/
     ├── test_local_autonomy.py
     ├── test_mcp_server.py
     ├── test_outlier_multiplier.py
+    ├── test_outro_card.py
     ├── test_pacing_polish.py
+    ├── test_packaging_linter.py
+    ├── test_pinger_and_virality_scraper.py
     ├── test_pipeline_deadair_broll.py
     ├── test_podcast_engine.py
     ├── test_trajectory_optimizer.py
-    └── ... (415 tests total)
+    └── ... (428 tests total)
 ```
 
 ---
@@ -421,7 +449,7 @@ pytest
 ```
 
 **Quality Assurance Metrics:**
-- **415 Passing Tests:** 100% pass rate across functional baseline, unit, integration, stress, and adversarial suites (415 passed, 0 failed, 0 xfailed, 0 skipped out of 415 collected items in 80s).
+- **425 Passing Tests:** 100% pass rate across functional baseline, unit, integration, stress, and adversarial suites (425 passed, 0 failed, 0 xfailed, 0 skipped out of 425 collected items in ~92s).
 - **Strict Regression Invariance:** All baseline tests maintain complete functional parity with full local autonomy.
 - **Hardware Boundary Verification:** Full test execution verified locally on Windows, Python 3.12, CUDA active, $\le 4\text{GB}$ VRAM constraints with automated CPU fallbacks.
 

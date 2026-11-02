@@ -19,8 +19,54 @@ import wave
 import subprocess
 import tempfile
 import logging
+import json
+import re
 
 logger = logging.getLogger(__name__)
+
+
+def _probe_stream_info(path: str) -> Tuple[bool, float]:
+    """
+    Returns (has_audio, duration_seconds) for a media container.
+    Gracefully degrades across ffprobe and ffmpeg banner parsing.
+    """
+    has_audio = False
+    duration = 0.0
+
+    # 1. Try ffprobe if available
+    try:
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration:stream=codec_type",
+            "-of", "json",
+            path,
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+        if res.returncode == 0 and res.stdout.strip():
+            d = json.loads(res.stdout)
+            streams = d.get("streams", [])
+            has_audio = any(s.get("codec_type") == "audio" for s in streams)
+            fmt = d.get("format", {})
+            duration = float(fmt.get("duration", 0.0))
+            return has_audio, duration
+    except Exception:
+        pass
+
+    # 2. Fallback to ffmpeg -i banner inspection
+    try:
+        cmd = ["ffmpeg", "-i", path]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+        stderr = res.stderr
+        has_audio = "Audio:" in stderr
+        m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", stderr)
+        if m:
+            hh, mm, ss = m.groups()
+            duration = int(hh) * 3600 + int(mm) * 60 + float(ss)
+    except Exception:
+        pass
+
+    return has_audio, duration
 
 
 def synthesize_bell_chime(
@@ -265,10 +311,10 @@ Dialogue: 1,{prompt_in_str},{dur_str},FooterPrompt,,0,0,0,,{{\\fad(200,200)}}{ct
                 chime_style=getattr(cfg, "chime_style", "soft_zen"),
             )
             cmd.extend(["-i", chime_wav_path])
-            af = f"[1:a]adelay={delay_ms}|{delay_ms},apad=whole_dur={dur:.2f}[a]"
+            af = f"[1:a]adelay={delay_ms}|{delay_ms},apad=whole_dur={dur:.2f},atrim=0:{dur:.2f}[a]"
         else:
             cmd.extend(["-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo", "-t", f"{dur:.2f}"])
-            af = f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo[a]"
+            af = f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,atrim=0:{dur:.2f}[a]"
 
         filter_complex = f"{vf};{af}"
 
@@ -283,17 +329,25 @@ Dialogue: 1,{prompt_in_str},{dur_str},FooterPrompt,,0,0,0,,{{\\fad(200,200)}}{ct
             "-b:a", "192k",
             "-pix_fmt", "yuv420p",
             "-r", str(int(fps)),
+            "-t", f"{dur:.2f}",
             output_mp4_path,
         ])
 
         try:
             res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as exc:
             # Fallback to libx264 if NVENC fails
             if test_vcodec != "libx264":
                 idx = cmd.index(test_vcodec)
                 cmd[idx] = "libx264"
                 subprocess.run(cmd, capture_output=True, text=True, check=True)
+            else:
+                if os.path.exists(output_mp4_path) and os.path.getsize(output_mp4_path) == 0:
+                    try:
+                        os.remove(output_mp4_path)
+                    except OSError:
+                        pass
+                raise
 
         return output_mp4_path
 
@@ -307,22 +361,34 @@ Dialogue: 1,{prompt_in_str},{dur_str},FooterPrompt,,0,0,0,,{{\\fad(200,200)}}{ct
         """
         Concatenates the main video clip and outro card into a seamless master MP4.
         Standardizes SAR, framerate (60fps), and audio sample rate for click-free playback.
+        Gracefully handles source clips with or without existing audio streams.
         """
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         tmp_output = output_path + ".tmp.mp4"
+
+        # Probe main clip to verify whether audio stream exists
+        has_audio, main_dur = _probe_stream_info(main_clip_path)
+
+        if has_audio:
+            a0_filter = "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0];"
+        else:
+            # Synthesize silent audio track of exact matching length
+            dur_clamp = max(main_dur, 0.1)
+            a0_filter = f"anullsrc=r=44100:cl=stereo,atrim=0:{dur_clamp:.3f}[a0];"
+
+        filter_complex = (
+            "[0:v]setsar=1,fps=60[v0];"
+            "[1:v]setsar=1,fps=60[v1];"
+            f"{a0_filter}"
+            "[1:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];"
+            "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]"
+        )
 
         cmd = [
             "ffmpeg", "-y",
             "-i", main_clip_path,
             "-i", outro_clip_path,
-            "-filter_complex",
-            (
-                "[0:v]setsar=1,fps=60[v0];"
-                "[1:v]setsar=1,fps=60[v1];"
-                "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0];"
-                "[1:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];"
-                "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]"
-            ),
+            "-filter_complex", filter_complex,
             "-map", "[v]",
             "-map", "[a]",
             "-c:v", vcodec,
@@ -334,16 +400,38 @@ Dialogue: 1,{prompt_in_str},{dur_str},FooterPrompt,,0,0,0,,{{\\fad(200,200)}}{ct
 
         try:
             subprocess.run(cmd, capture_output=True, text=True, check=True)
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as exc:
             # Fallback to libx264 if hardware encoder unavailable
             if vcodec != "libx264":
                 idx = cmd.index(vcodec)
                 cmd[idx] = "libx264"
-                subprocess.run(cmd, capture_output=True, text=True, check=True)
+                try:
+                    subprocess.run(cmd, capture_output=True, text=True, check=True)
+                except subprocess.CalledProcessError:
+                    if os.path.exists(tmp_output):
+                        try:
+                            os.remove(tmp_output)
+                        except OSError:
+                            pass
+                    raise
+            else:
+                if os.path.exists(tmp_output):
+                    try:
+                        os.remove(tmp_output)
+                    except OSError:
+                        pass
+                raise
 
-        if os.path.exists(tmp_output):
+        if os.path.exists(tmp_output) and os.path.getsize(tmp_output) > 0:
             if os.path.exists(output_path):
                 os.remove(output_path)
             os.rename(tmp_output, output_path)
+        else:
+            if os.path.exists(tmp_output):
+                try:
+                    os.remove(tmp_output)
+                except OSError:
+                    pass
+            raise RuntimeError(f"FFmpeg failed to produce valid concatenated video: {output_path}")
 
         return output_path

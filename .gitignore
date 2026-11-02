@@ -63,7 +63,7 @@ scratch/
 *.swo
 
 # --- Media Assets & Pipeline Storage ---
-data/
+data/*
 !data/**/.gitkeep
 !data/.gitkeep
 

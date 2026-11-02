@@ -6,7 +6,7 @@ and queues top-performing videos for clipping.
 Handles SIGINT and SIGTERM gracefully.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 import time
 import signal
 import sys
@@ -17,8 +17,10 @@ from ..config import AppConfig
 from .channel_registry import ChannelRegistry
 from .monitor import ChannelMonitor
 from .ranker import PublicMetricRanker
-from ..rights.gate import LocalRightsPolicy
 from ..contracts.models import VideoCandidate, CreatorSource
+
+if TYPE_CHECKING:
+    from ..rights.gate import LocalRightsPolicy
 
 logger = logging.getLogger("yt_clipping.daemon")
 
@@ -35,7 +37,7 @@ class DiscoveryDaemon:
         monitor: Optional[ChannelMonitor] = None,
         registry: Optional[ChannelRegistry] = None,
         ranker: Optional[PublicMetricRanker] = None,
-        rights_policy: Optional[LocalRightsPolicy] = None,
+        rights_policy: Optional["LocalRightsPolicy"] = None,
     ):
         self.config = config or AppConfig()
         self.interval = interval_seconds
@@ -45,10 +47,14 @@ class DiscoveryDaemon:
             db_path=self.config.db_path,
         )
         self.ranker = ranker or PublicMetricRanker(db_path=self.config.db_path)
-        self.rights_policy = rights_policy or LocalRightsPolicy(
-            ledger_path=self.config.rights_ledger_path,
-            db_path=self.config.db_path,
-        )
+        if rights_policy is not None:
+            self.rights_policy = rights_policy
+        else:
+            from ..rights.gate import LocalRightsPolicy
+            self.rights_policy = LocalRightsPolicy(
+                ledger_path=self.config.rights_ledger_path,
+                db_path=self.config.db_path,
+            )
 
         self._running = False
         self._cycles_completed = 0

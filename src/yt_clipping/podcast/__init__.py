@@ -13,6 +13,13 @@ from .layout import (
 )
 from .captions import PodcastSubtitleGenerator
 from .pipeline import PodcastShortMaker
+from .diarization import (
+    SpeakerTurn,
+    SpeakerDiarizer,
+    AcousticEnergyDiarizer,
+    PyannoteDiarizerAdapter,
+    get_speaker_diarizer,
+)
 
 __all__ = [
     "PodcastLayoutConfig",
@@ -24,4 +31,9 @@ __all__ = [
     "escape_libass_path",
     "PodcastSubtitleGenerator",
     "PodcastShortMaker",
+    "SpeakerTurn",
+    "SpeakerDiarizer",
+    "AcousticEnergyDiarizer",
+    "PyannoteDiarizerAdapter",
+    "get_speaker_diarizer",
 ]

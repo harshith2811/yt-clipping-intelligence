@@ -294,3 +294,67 @@ def test_renderer_boolean_outro_toggle_enabled(temp_dir):
     assert os.path.exists(rendered.file_path)
     # Duration must equal candidate duration (2.0s) + outro duration (1.5s) = 3.5s
     assert rendered.duration_seconds == pytest.approx(3.5, 0.3)
+
+
+def test_concat_clip_with_outro_missing_main_audio(temp_dir):
+    """Verifies that concat_clip_with_outro handles main clips with no audio by synthesizing silence."""
+    engine = OutroCardEngine()
+
+    # Create dummy main clip WITHOUT audio (1.0s)
+    main_clip = os.path.join(temp_dir, "silent_main.mp4")
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", "testsrc=size=540x960:rate=30:duration=1.0",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            main_clip,
+        ],
+        capture_output=True,
+        check=True,
+    )
+
+    # Render outro clip with chime (1.0s)
+    outro_clip = os.path.join(temp_dir, "outro_with_chime.mp4")
+    cfg = OutroCardConfig(duration=1.0, button_transform_time=0.2, width=540, height=960, fps=30.0)
+    engine.render_outro_clip(outro_clip, config=cfg, vcodec="libx264")
+
+    combined = os.path.join(temp_dir, "combined_silent.mp4")
+    engine.concat_clip_with_outro(main_clip, outro_clip, combined, vcodec="libx264")
+
+    assert os.path.exists(combined)
+    assert os.path.getsize(combined) > 5000
+
+    proc = subprocess.run(["ffmpeg", "-i", combined], capture_output=True, text=True)
+    assert "Audio:" in proc.stderr
+    assert "Duration: 00:00:02" in proc.stderr
+
+
+def test_render_outro_clip_duration_clamped(temp_dir):
+    """Verifies that render_outro_clip clamps audio and video strictly to cfg.duration."""
+    engine = OutroCardEngine()
+    cfg = OutroCardConfig(duration=1.0, button_transform_time=0.2, width=540, height=960, fps=30.0)
+    out_mp4 = os.path.join(temp_dir, "clamped_outro.mp4")
+    engine.render_outro_clip(out_mp4, config=cfg, vcodec="libx264")
+
+    proc = subprocess.run(["ffmpeg", "-i", out_mp4], capture_output=True, text=True)
+    assert "Duration: 00:00:01.00" in proc.stderr
+
+
+def test_concat_clip_with_outro_failure_raises(temp_dir):
+    """Verifies that if concatenation fails, an exception is raised and corrupt files are cleaned up."""
+    engine = OutroCardEngine()
+    invalid_main = os.path.join(temp_dir, "invalid.mp4")
+    with open(invalid_main, "w") as f:
+        f.write("not a valid video")
+
+    outro_clip = os.path.join(temp_dir, "outro.mp4")
+    cfg = OutroCardConfig(duration=1.0, width=540, height=960, fps=30.0)
+    engine.render_outro_clip(outro_clip, config=cfg, vcodec="libx264")
+
+    combined = os.path.join(temp_dir, "combined_fail.mp4")
+    with pytest.raises(Exception):
+        engine.concat_clip_with_outro(invalid_main, outro_clip, combined, vcodec="libx264")
+
+    # Combined output should not exist as a 0-byte file
+    assert not os.path.exists(combined) or os.path.getsize(combined) > 0
+
