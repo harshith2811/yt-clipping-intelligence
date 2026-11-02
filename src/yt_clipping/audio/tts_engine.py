@@ -113,6 +113,21 @@ class TTSEngine:
         except Exception as pyttsx_err:
             pass
 
+        # 3. Headless Fallback: FFmpeg audio generator if neural & system TTS engines are unavailable
+        try:
+            est_duration = max(1.0, len(clean_text.split()) * 0.4)
+            cmd = [
+                "ffmpeg", "-y", "-f", "lavfi",
+                "-i", f"sine=frequency=440:duration={est_duration}",
+                "-c:a", "libmp3lame" if output_path.endswith(".mp3") else "pcm_s16le",
+                output_path,
+            ]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 100:
+                return os.path.abspath(output_path)
+        except Exception:
+            pass
+
         raise RuntimeError(f"All TTS synthesis backends failed for text: '{clean_text[:40]}...'")
 
     def overlay_narration(

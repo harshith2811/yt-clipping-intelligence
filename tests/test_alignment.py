@@ -216,7 +216,7 @@ def test_whisperx_adapter_nan_timestamp_repair(sample_transcript, tmp_path):
     mock_whisperx.align.return_value = fake_wx_result
 
     with patch.object(adapter, "is_available", return_value=True):
-        with patch.dict("sys.modules", {"whisperx": mock_whisperx}):
+        with patch.dict("sys.modules", {"whisperx": mock_whisperx, "torch": MagicMock()}):
             aligned = adapter.align_words(str(dummy_audio), sample_transcript)
             assert isinstance(aligned, Transcript)
             words = aligned.segments[0].words

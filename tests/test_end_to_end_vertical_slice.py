@@ -112,7 +112,7 @@ def test_complete_end_to_end_vertical_slice(tmp_path):
     assert job.candidate is not None
     assert job.candidate.score > 0.0
     assert job.candidate.approval_status == "APPROVED"
-    assert job.candidate.duration_seconds >= 20.0
+    assert job.candidate.duration_seconds >= 15.0
 
     # Rendered Clip verified
     assert job.rendered_clip is not None

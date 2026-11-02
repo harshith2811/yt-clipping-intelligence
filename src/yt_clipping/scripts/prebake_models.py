@@ -21,7 +21,7 @@ MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../m
 WHISPER_CACHE_DIR = os.path.join(MODELS_DIR, "whisper")
 
 YUNET_URL = (
-    "https://raw.githubusercontent.com/opencv/opencv_zoo/master/models/"
+    "https://github.com/opencv/opencv_zoo/raw/main/models/"
     "face_detection_yunet/face_detection_yunet_2023mar.onnx"
 )
 YUNET_FILENAME = "face_detection_yunet_2023mar.onnx"

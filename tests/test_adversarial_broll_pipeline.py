@@ -312,10 +312,9 @@ def test_broll_readonly_target_path(tmp_path):
 
     out_file = tmp_path / "readonly_output.mp4"
     out_file.write_bytes(b"existing content")
-    # Make file read-only on Windows
-    os.chmod(str(out_file), stat.S_IREAD)
 
-    try:
+    from unittest.mock import patch
+    with patch("os.replace", side_effect=PermissionError("Read-only target path")):
         res = engine.apply_broll_overlay(
             video_path=str(real_primary),
             output_path=str(out_file),
@@ -325,9 +324,6 @@ def test_broll_readonly_target_path(tmp_path):
         assert res.applied is False
         assert res.output_video_path == str(real_primary)
         assert not os.path.exists(f"{out_file}.tmp.mp4")
-    finally:
-        # Reset file permissions for cleanup
-        os.chmod(str(out_file), stat.S_IWRITE)
 
 
 def test_broll_extreme_monologue_intervals():

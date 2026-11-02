@@ -1,13 +1,11 @@
 name: CI
 
-# Automated CI is currently on hold (local-first testing and containerized test suites preferred)
-# Trigger manually via GitHub Actions UI or `gh workflow run CI`
 on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
   workflow_dispatch:
-#  push:
-#    branches: [main, master]
-#  pull_request:
-#    branches: [main, master]
 
 jobs:
   test:
@@ -31,7 +29,7 @@ jobs:
       - name: Install FFmpeg & System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg libgl1
+          sudo apt-get install -y ffmpeg libgl1 espeak libespeak-dev
 
       - name: Install Python Dependencies
         run: |
