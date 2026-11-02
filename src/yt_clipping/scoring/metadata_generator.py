@@ -13,6 +13,7 @@ import urllib.request
 import urllib.error
 
 from ..contracts.models import HighlightCandidate, Transcript
+from .packaging_linter import PackagingLinter
 
 
 @dataclass
@@ -43,11 +44,14 @@ class MetadataGenerator:
         llm_api_key: Optional[str] = None,
         model: str = "llama3.2:1b",
         timeout: int = 25,
+        linter: Optional[PackagingLinter] = None,
     ):
         self.llm_api_base = (llm_api_base or "").rstrip("/")
         self.llm_api_key = llm_api_key
         self.model = model
         self.timeout = timeout
+        self.linter = linter or PackagingLinter()
+
 
     def generate_metadata(
         self,
@@ -72,12 +76,16 @@ class MetadataGenerator:
             try:
                 llm_meta = self._call_llm(candidate, clip_text)
                 if llm_meta:
+                    llm_meta.title = self.linter.sanitize_title(llm_meta.title)
                     return llm_meta
             except Exception:
                 pass
 
         # 2. Rule-based heuristic generation (zero-dependency, always deterministic)
-        return self._generate_heuristic(candidate, clip_text)
+        meta = self._generate_heuristic(candidate, clip_text)
+        meta.title = self.linter.sanitize_title(meta.title)
+        return meta
+
 
     def _call_llm(self, candidate: HighlightCandidate, clip_text: str) -> Optional[ClipMetadata]:
         prompt = (

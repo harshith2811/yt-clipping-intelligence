@@ -400,6 +400,7 @@ class HighlightCandidate:
     rationale: str = ""
     approval_status: str = "PENDING_APPROVAL"  # PENDING_APPROVAL, APPROVED, REJECTED
     transcript_text: str = ""
+    loop_affinity_score: float = 0.0
 
     def validate_bounds(self, source_duration: float) -> bool:
         if self.start_seconds < 0.0:
@@ -420,6 +421,7 @@ class HighlightCandidate:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> HighlightCandidate:
         data_copy = dict(data)
+        data_copy.setdefault("loop_affinity_score", 0.0)
         if isinstance(data_copy.get("breakdown"), dict):
             data_copy["breakdown"] = ScoreBreakdown.from_dict(data_copy["breakdown"])
         return cls(**data_copy)
@@ -438,6 +440,27 @@ class RenderProfile:
     burn_subtitles: bool = True
     layout_mode: str = "blur_background"  # blur_background, crop_center, split_screen, active_speaker, auto
     subtitle_preset: str = "hormozi"      # hormozi, beast_bounce, neon_cyber, karaoke_gold, bold_social
+    # Self-Contained CTA Overlay Engine
+    enable_cta: bool = False
+    cta_text: str = "Subscribe to this channel for more"
+    cta_timing: str = "end"               # end, intro, persistent
+    cta_style: str = "modern_pill"        # modern_pill, neon_banner, minimal
+    cta_duration: float = 3.5
+    cta_margin_bottom: int = 440
+    # Dedicated Animated Outro Card & Bell Chime Engine
+    enable_outro_card: bool = False
+    outro_duration: float = 2.5
+    outro_channel_name: Optional[str] = None
+    outro_sub_heading: str = "Thanks for watching!"
+    outro_prompt: str = "Turn on notifications for more clips!"
+    enable_outro_chime: bool = True
+    outro_chime_style: str = "soft_zen"   # soft_zen, soft_double, classic_bell
+    # Pacing and Broadcast Polish
+    enable_pacing_polish: bool = True
+    audio_fade_in_seconds: float = 0.02   # 20ms anti-pop audio transition
+    audio_fade_out_seconds: float = 0.25  # 250ms outro audio transition
+    video_fade_in_seconds: float = 0.15   # 150ms subtle hook fade-in
+    video_fade_out_seconds: float = 0.25  # 250ms outro video transition
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -446,6 +469,24 @@ class RenderProfile:
     def from_dict(cls, data: Dict[str, Any]) -> RenderProfile:
         data_copy = dict(data)
         data_copy.setdefault("subtitle_preset", "hormozi")
+        data_copy.setdefault("enable_cta", False)
+        data_copy.setdefault("cta_text", "Subscribe to this channel for more")
+        data_copy.setdefault("cta_timing", "end")
+        data_copy.setdefault("cta_style", "modern_pill")
+        data_copy.setdefault("cta_duration", 3.5)
+        data_copy.setdefault("cta_margin_bottom", 440)
+        data_copy.setdefault("enable_outro_card", False)
+        data_copy.setdefault("outro_duration", 2.5)
+        data_copy.setdefault("outro_channel_name", None)
+        data_copy.setdefault("outro_sub_heading", "Thanks for watching!")
+        data_copy.setdefault("outro_prompt", "Turn on notifications for more clips!")
+        data_copy.setdefault("enable_outro_chime", True)
+        data_copy.setdefault("outro_chime_style", "soft_zen")
+        data_copy.setdefault("enable_pacing_polish", True)
+        data_copy.setdefault("audio_fade_in_seconds", 0.02)
+        data_copy.setdefault("audio_fade_out_seconds", 0.25)
+        data_copy.setdefault("video_fade_in_seconds", 0.15)
+        data_copy.setdefault("video_fade_out_seconds", 0.25)
         return cls(**data_copy)
 
 

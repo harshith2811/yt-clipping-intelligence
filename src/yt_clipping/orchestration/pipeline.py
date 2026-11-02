@@ -5,9 +5,10 @@ Candidate Detection, Highlight Scoring, FFmpeg Rendering, QA Verification,
 and Autopost Handoff with checkpoint recovery.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 import uuid
 import os
+import subprocess
 from datetime import datetime, timezone
 
 from ..contracts.models import (
@@ -16,6 +17,9 @@ from ..contracts.models import (
     JobStatus,
     RenderProfile,
     HighlightCandidate,
+    Transcript,
+    TranscriptSegment,
+    WordTimestamp,
 )
 from ..contracts.interfaces import (
     RightsPolicy,
@@ -31,7 +35,107 @@ from ..contracts.interfaces import (
 from ..orchestration.state_machine import JobJournal
 from ..discovery.heatmap import HeatmapAnalyzer
 from ..detection.segmenter import suppress_overlapping_candidates
+from ..detection.short_viability import ShortViabilityValidator
 from ..scoring.metadata_generator import MetadataGenerator
+from ..detection.deadair import DeadAirPruner, PruneResult
+from ..rendering.b_roll import BRollOverlayEngine, BRollConfig, BRollOverlayResult
+
+
+def remap_transcript_for_keep_intervals(
+    transcript: Transcript,
+    keep_intervals: List[Tuple[float, float]],
+    candidate_start: float = 0.0,
+) -> Transcript:
+    """
+    Constructs a new continuous Transcript relative to 0.0 with timestamps shifted
+    to account for excised dead-air intervals.
+    """
+    remapped_segments: List[TranscriptSegment] = []
+    current_time_offset = 0.0
+
+    # Calculate cumulative offset mappings for each keep interval
+    interval_mappings = []
+    for k_start, k_end in keep_intervals:
+        dur = k_end - k_start
+        # An event at source time t in [k_start, k_end] maps to: current_time_offset + (t - k_start)
+        interval_mappings.append((k_start, k_end, current_time_offset))
+        current_time_offset += dur
+
+    for seg in transcript.segments:
+        new_words: List[WordTimestamp] = []
+        for w in seg.words:
+            w_mid = (w.start + w.end) / 2.0
+            for k_start, k_end, out_offset in interval_mappings:
+                if k_start <= w_mid <= k_end:
+                    s_rel = out_offset + (w.start - k_start)
+                    e_rel = out_offset + (w.end - k_start)
+                    new_words.append(
+                        WordTimestamp(
+                            word=w.word,
+                            start=round(s_rel, 3),
+                            end=round(e_rel, 3),
+                        )
+                    )
+                    break
+
+        if new_words:
+            remapped_segments.append(
+                TranscriptSegment(
+                    segment_id=len(remapped_segments) + 1,
+                    start=new_words[0].start,
+                    end=new_words[-1].end,
+                    text=" ".join(w.word for w in new_words),
+                    words=new_words,
+                    speaker_tag=seg.speaker_tag,
+                )
+            )
+
+    return Transcript(
+        video_id=transcript.video_id,
+        language=transcript.language,
+        duration_seconds=round(current_time_offset, 3),
+        text=" ".join(s.text for s in remapped_segments),
+        segments=remapped_segments,
+    )
+
+
+def apply_pacing_polish(
+    candidate: HighlightCandidate,
+    transcript: Transcript,
+) -> HighlightCandidate:
+    """
+    Broadcast Hook Pacing Polish & Word Boundary Protection:
+    1. Trims leading dead air > 0.15s down to ~0.10s preceding speech onset.
+    2. Protects speech onset against mid-word truncation if cut boundary starts inside a word.
+    3. Protects outro boundary against mid-word truncation.
+    4. Trims excessive trailing dead air (> 0.40s) down to ~0.25s for clean fade transitions.
+    """
+    cand_words: List[WordTimestamp] = []
+    for s in transcript.segments:
+        for w in s.words:
+            if w.end > candidate.start_seconds and w.start < candidate.end_seconds:
+                cand_words.append(w)
+
+    if cand_words:
+        # 1. Start boundary: avoid mid-word truncation or trim leading dead-air to ~0.10s
+        first_w = cand_words[0]
+        if first_w.start < candidate.start_seconds:
+            candidate.start_seconds = max(0.0, round(first_w.start - 0.10, 2))
+        else:
+            leading_pause = first_w.start - candidate.start_seconds
+            if leading_pause > 0.15:
+                candidate.start_seconds = max(0.0, round(first_w.start - 0.10, 2))
+
+        # 2. Outro boundary: protect against mid-word cutoffs and prune excessive dead-air tails
+        last_w = cand_words[-1]
+        if last_w.start < candidate.end_seconds < last_w.end:
+            candidate.end_seconds = round(last_w.end, 2)
+        elif candidate.end_seconds - last_w.end > 0.40:
+            candidate.end_seconds = round(last_w.end + 0.25, 2)
+
+        candidate.duration_seconds = round(candidate.end_seconds - candidate.start_seconds, 2)
+
+    return candidate
 
 
 class ClippingPipeline:
@@ -54,6 +158,9 @@ class ClippingPipeline:
         journal: Optional[JobJournal] = None,
         heatmap_analyzer: Optional[HeatmapAnalyzer] = None,
         metadata_generator: Optional[MetadataGenerator] = None,
+        viability_validator: Optional[ShortViabilityValidator] = None,
+        dead_air_pruner: Optional[DeadAirPruner] = None,
+        b_roll_engine: Optional[BRollOverlayEngine] = None,
         output_dir: str = "data/rendered_clips",
     ):
         self.rights_policy = rights_policy
@@ -67,7 +174,11 @@ class ClippingPipeline:
         self.journal = journal or JobJournal()
         self.heatmap_analyzer = heatmap_analyzer or HeatmapAnalyzer()
         self.metadata_generator = metadata_generator or MetadataGenerator()
+        self.viability_validator = viability_validator or ShortViabilityValidator()
+        self.dead_air_pruner = dead_air_pruner or DeadAirPruner()
+        self.b_roll_engine = b_roll_engine or BRollOverlayEngine()
         self.output_dir = output_dir
+
 
     def reconcile_job_checkpoints(self, job: ClipJob) -> None:
         """
@@ -157,6 +268,9 @@ class ClippingPipeline:
         job_id: Optional[str] = None,
         min_duration: Optional[float] = None,
         max_duration: Optional[float] = None,
+        enable_deadair_pruning: bool = False,
+        enable_broll: bool = False,
+        broll_assets_dir: Optional[str] = None,
     ) -> ClipJob:
         """
         Executes the full pipeline for a video ID.
@@ -335,15 +449,45 @@ class ClippingPipeline:
             except Exception:
                 pass
 
-            # Stage 6: Review / Approval Gate
-            if top_candidate.score >= auto_approve_threshold:
-                top_candidate.approval_status = "APPROVED"
+            # Stage 6: Review / Approval Gate (Stand-Alone Short Viability Check)
+            viability_checkpoint = {}
+            if self.viability_validator:
+                try:
+                    viability_report = self.viability_validator.validate_candidate(top_candidate, transcript)
+                    viability_checkpoint["viability"] = viability_report.to_dict()
+                    top_candidate.loop_affinity_score = round(viability_report.loop_hook_score * 10.0, 1)
+                    if not viability_report.is_viable:
+                        top_candidate.approval_status = "REJECTED"
+                        critique_str = "; ".join(viability_report.reasons_for_rejection)
+                        top_candidate.rationale = f"{top_candidate.rationale} [Viability Rejected: {critique_str}]".strip()
+                    elif top_candidate.score >= auto_approve_threshold:
+                        top_candidate.approval_status = "APPROVED"
+                    else:
+                        top_candidate.approval_status = "PENDING_APPROVAL"
+                except Exception:
+                    if top_candidate.score >= auto_approve_threshold:
+                        top_candidate.approval_status = "APPROVED"
+                    else:
+                        top_candidate.approval_status = "PENDING_APPROVAL"
             else:
-                top_candidate.approval_status = "PENDING_APPROVAL"
+                if top_candidate.score >= auto_approve_threshold:
+                    top_candidate.approval_status = "APPROVED"
+                else:
+                    top_candidate.approval_status = "PENDING_APPROVAL"
 
+            # Stage 6b: Broadcast Hook Pacing Polish & Word Boundary Protection
+            if getattr(render_profile, "enable_pacing_polish", False) and transcript and not enable_deadair_pruning:
+                top_candidate = apply_pacing_polish(top_candidate, transcript)
+
+            checkpoint_payload = {
+                "approval_status": top_candidate.approval_status,
+                "loop_affinity_score": getattr(top_candidate, "loop_affinity_score", 0.0),
+            }
+            checkpoint_payload.update(viability_checkpoint)
             self.journal.record_stage_checkpoint(
-                job, JobStage.REVIEWED, {"approval_status": top_candidate.approval_status}
+                job, JobStage.REVIEWED, checkpoint_payload
             )
+
 
             # BUG-26 fix: Validate candidate bounds against actual source duration prior to rendering
             source_dur = probe_info.get("duration", transcript.duration_seconds) if probe_info else transcript.duration_seconds
@@ -362,18 +506,94 @@ class ClippingPipeline:
                     rendered_clip = job.rendered_clip
 
             if not rendered_clip:
+                active_source_path = asset_path
+                active_candidate = top_candidate
+                active_transcript = transcript
+                deadair_telemetry = None
+
+                # Pre-render micro-jump-cuts via DeadAirPruner if enabled
+                if enable_deadair_pruning and self.dead_air_pruner and transcript:
+                    prune_res = self.dead_air_pruner.prune_candidate(top_candidate, transcript)
+                    deadair_telemetry = prune_res.to_dict()
+                    if prune_res.keep_intervals and (top_candidate.duration_seconds - prune_res.pruned_duration > 0.1):
+                        pruned_tmp_path = os.path.join(self.output_dir, f"pruned_{top_candidate.candidate_id}.mp4")
+                        os.makedirs(self.output_dir, exist_ok=True)
+                        v_expr, a_expr = self.dead_air_pruner.generate_select_expressions(
+                            prune_res.keep_intervals, offset_seconds=0.0
+                        )
+                        if os.path.exists(asset_path) and os.path.getsize(asset_path) > 1000:
+                            cut_cmd = [
+                                "ffmpeg", "-y", "-i", asset_path,
+                                "-filter_complex", f"[0:v]{v_expr}[v];[0:a]{a_expr}[a]",
+                                "-map", "[v]", "-map", "[a]",
+                                "-c:v", "libx264", "-preset", "ultrafast",
+                                "-c:a", "aac",
+                                pruned_tmp_path,
+                            ]
+                            try:
+                                res = subprocess.run(cut_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                if res.returncode == 0 and os.path.exists(pruned_tmp_path) and os.path.getsize(pruned_tmp_path) > 0:
+                                    active_source_path = pruned_tmp_path
+                            except Exception:
+                                pass
+
+                        top_candidate.start_seconds = 0.0
+                        top_candidate.end_seconds = prune_res.pruned_duration
+                        top_candidate.duration_seconds = prune_res.pruned_duration
+                        active_transcript = remap_transcript_for_keep_intervals(
+                            transcript,
+                            prune_res.keep_intervals,
+                            candidate_start=0.0,
+                        )
+
                 rendered_clip = self.renderer.render_clip(
-                    source_path=asset_path,
+                    source_path=active_source_path,
                     candidate=top_candidate,
                     profile=render_profile,
                     output_dir=self.output_dir,
-                    transcript=transcript,
+                    transcript=active_transcript,
                 )
+
+                # Post-render Automated B-Roll Overlay if enabled
+                broll_telemetry = None
+                if enable_broll and self.b_roll_engine and active_transcript:
+                    words = []
+                    for seg in active_transcript.segments:
+                        words.extend(seg.words)
+                    broll_out_path = os.path.join(
+                        self.output_dir,
+                        f"{os.path.splitext(os.path.basename(rendered_clip.file_path))[0]}_broll.mp4"
+                    )
+                    broll_res = self.b_roll_engine.apply_broll_overlay(
+                        video_path=rendered_clip.file_path,
+                        output_path=broll_out_path,
+                        words=words,
+                        candidate=top_candidate,
+                        clip_start=0.0 if enable_deadair_pruning else top_candidate.start_seconds,
+                        clip_end=top_candidate.duration_seconds if enable_deadair_pruning else top_candidate.end_seconds,
+                        assets_dir=broll_assets_dir,
+                    )
+                    broll_telemetry = broll_res.to_dict()
+                    if broll_res.applied:
+                        rendered_clip.file_path = broll_res.output_video_path
+                        if broll_res.file_hash:
+                            rendered_clip.file_hash = broll_res.file_hash
+
                 job.rendered_clip = rendered_clip
+                checkpoint_payload = {
+                    "clip_id": rendered_clip.clip_id,
+                    "file_path": rendered_clip.file_path,
+                    "sha256": rendered_clip.file_hash,
+                }
+                if deadair_telemetry:
+                    checkpoint_payload["deadair_pruned"] = deadair_telemetry
+                if broll_telemetry:
+                    checkpoint_payload["broll_overlay"] = broll_telemetry
+
                 self.journal.record_stage_checkpoint(
                     job,
                     JobStage.RENDERED,
-                    {"clip_id": rendered_clip.clip_id, "file_path": rendered_clip.file_path, "sha256": rendered_clip.file_hash},
+                    checkpoint_payload,
                 )
 
             # Stage 8: Post-Render Quality Assurance Verification (with checkpoint resumption)
@@ -483,3 +703,13 @@ class ClippingPipeline:
         # BUG-10 fix: Suppress overlapping candidates on scored candidates
         deduped = suppress_overlapping_candidates(scored)
         return deduped
+
+
+PipelineCoordinator = ClippingPipeline
+
+__all__ = [
+    "ClippingPipeline",
+    "PipelineCoordinator",
+    "remap_transcript_for_keep_intervals",
+    "apply_pacing_polish",
+]

@@ -136,14 +136,45 @@ def cmd_run(args: argparse.Namespace) -> None:
     )
     vcodec = "h264_nvenc" if getattr(args, "gpu", False) else getattr(args, "vcodec", "libx264")
     sub_preset = getattr(args, "subtitle_preset", "hormozi")
+    enable_cta = getattr(args, "enable_cta", False)
+    cta_text = getattr(args, "cta_text", "Subscribe to this channel for more")
+    cta_timing = getattr(args, "cta_timing", "end")
+    cta_style = getattr(args, "cta_style", "modern_pill")
+    cta_margin_bottom = getattr(args, "cta_margin_bottom", 440)
+    enable_outro = getattr(args, "enable_outro_card", False)
+    outro_dur = getattr(args, "outro_duration", 2.5)
+    outro_channel = getattr(args, "outro_channel_name", None)
+    enable_polish = getattr(args, "enable_polish", True)
+
     profile = RenderProfile(
         layout_mode=getattr(args, "layout", "blur_background"),
         vcodec=vcodec,
         subtitle_preset=sub_preset,
+        enable_cta=enable_cta,
+        cta_text=cta_text,
+        cta_timing=cta_timing,
+        cta_style=cta_style,
+        cta_margin_bottom=cta_margin_bottom,
+        enable_outro_card=enable_outro,
+        outro_duration=outro_dur,
+        outro_channel_name=outro_channel,
+        enable_pacing_polish=enable_polish,
     )
+
+    deadair_enabled = getattr(args, "enable_deadair_pruning", False)
+    broll_enabled = getattr(args, "enable_broll", False)
+    broll_dir = getattr(args, "broll_assets_dir", None)
 
     print(f"[*] Starting pipeline execution for video: {video_id}")
     print(f"[*] Profile: {profile.name} (layout={profile.layout_mode}, vcodec={profile.vcodec}, subs={profile.subtitle_preset}), dry_run={args.dry_run}, bounds=[{min_dur:.0f}s - {max_dur:.0f}s]")
+    if deadair_enabled:
+        print("[*] Enhancement: Dead-Air Pruning enabled")
+    if broll_enabled:
+        print(f"[*] Enhancement: B-Roll Overlay enabled (assets_dir={broll_dir or 'assets/broll'})")
+    if enable_cta:
+        print(f"[*] Enhancement: Animated CTA Overlay enabled ({cta_style}, timing={cta_timing})")
+    if enable_outro:
+        print(f"[*] Enhancement: Dedicated Animated Outro Card enabled (channel={outro_channel or 'auto'}, {outro_dur}s with bell chime)")
 
     try:
         job = pipeline.process_video(
@@ -153,6 +184,9 @@ def cmd_run(args: argparse.Namespace) -> None:
             auto_approve_threshold=args.threshold,
             min_duration=min_dur,
             max_duration=max_dur,
+            enable_deadair_pruning=deadair_enabled,
+            enable_broll=broll_enabled,
+            broll_assets_dir=broll_dir,
         )
         print("\n[SUCCESS] Pipeline Completed!")
         print(f"Job ID: {job.job_id}")
@@ -270,16 +304,41 @@ def cmd_autoprobe(args: argparse.Namespace) -> None:
             max_dur = getattr(args, "max_duration", 60.0)
             print(f"[*] Starting vertical 9:16 rendering pipeline (layout={args.layout}, preset={args.subtitle_preset}, bounds=[{min_dur:.0f}s - {max_dur:.0f}s])...")
             pipeline = build_pipeline(output_dir=args.output_dir, db_path=args.db, min_duration=min_dur, max_duration=max_dur)
+            enable_cta = getattr(args, "enable_cta", False)
+            cta_text = getattr(args, "cta_text", "Subscribe to this channel for more")
+            cta_timing = getattr(args, "cta_timing", "end")
+            cta_style = getattr(args, "cta_style", "modern_pill")
+            cta_margin_bottom = getattr(args, "cta_margin_bottom", 440)
+            enable_outro = getattr(args, "enable_outro_card", False)
+            outro_dur = getattr(args, "outro_duration", 2.5)
+            outro_channel = getattr(args, "outro_channel_name", None)
+            enable_polish = getattr(args, "enable_polish", True)
+
             profile = RenderProfile(
                 layout_mode=args.layout,
                 subtitle_preset=args.subtitle_preset,
+                enable_cta=enable_cta,
+                cta_text=cta_text,
+                cta_timing=cta_timing,
+                cta_style=cta_style,
+                cta_margin_bottom=cta_margin_bottom,
+                enable_outro_card=enable_outro,
+                outro_duration=outro_dur,
+                outro_channel_name=outro_channel,
+                enable_pacing_polish=enable_polish,
             )
+            deadair_enabled = getattr(args, "enable_deadair_pruning", False)
+            broll_enabled = getattr(args, "enable_broll", False)
+            broll_dir = getattr(args, "broll_assets_dir", None)
             job = pipeline.process_video(
                 v_id,
                 profile=profile,
                 dry_run=args.dry_run,
                 min_duration=min_dur,
                 max_duration=max_dur,
+                enable_deadair_pruning=deadair_enabled,
+                enable_broll=broll_enabled,
+                broll_assets_dir=broll_dir,
             )
 
             # Generate standalone executive HTML report
@@ -816,13 +875,52 @@ def cmd_ingest(args: argparse.Namespace) -> None:
     print(f"SHA-256: {probe['sha256']}")
 
 
-def main() -> None:
-    if hasattr(sys.stdout, "reconfigure"):
-        try:
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+def cmd_mcp_server(args: argparse.Namespace) -> None:
+    from ..mcp.server import MCPServer
+    server = MCPServer(
+        db_path=getattr(args, "db", "data/jobs.db"),
+        assets_dir=getattr(args, "assets_dir", "data/assets"),
+        transcripts_dir=getattr(args, "transcripts_dir", "data/transcripts"),
+        output_dir=getattr(args, "output_dir", "data/rendered_clips"),
+        log_level=getattr(args, "log_level", "INFO"),
+    )
+    server.run_stdio()
 
+
+def cmd_podcast(args: argparse.Namespace) -> None:
+    from ..podcast.config import PodcastLayoutConfig
+    from ..podcast.pipeline import PodcastShortMaker
+
+    cfg = PodcastLayoutConfig(
+        split_mode=getattr(args, "mode", "hybrid"),
+        host_side=getattr(args, "host_side", "left"),
+        preview=getattr(args, "preview", False),
+        burn_subtitles=not getattr(args, "no_subtitles", False),
+        divider_thickness=getattr(args, "divider_thickness", 4),
+        divider_color=getattr(args, "divider_color", "0x202020"),
+        enable_cta=getattr(args, "enable_cta", False),
+        cta_text=getattr(args, "cta_text", "Subscribe to this channel for more"),
+        cta_timing=getattr(args, "cta_timing", "end"),
+        cta_style=getattr(args, "cta_style", "modern_pill"),
+    )
+    maker = PodcastShortMaker(config=cfg)
+    print(f"[*] Processing podcast video: {args.source}")
+    print(f"[*] Window: {args.start:.1f}s to {args.start + args.duration:.1f}s (duration: {args.duration:.1f}s)")
+    print(f"[*] Layout mode: {cfg.split_mode} | Resolution: {cfg.width}x{cfg.height}")
+
+    res = maker.create_short(
+        video_path=args.source,
+        start_sec=args.start,
+        duration_sec=args.duration,
+        output_path=args.out,
+    )
+    print("\n[SUCCESS] Successfully rendered Podcast Short!")
+    print(f"Output file: {res['output_path']}")
+    print(f"Shots detected: {res['shots_detected']} ({', '.join(res['shot_breakdown'])})")
+    print(f"File size: {res['file_size_bytes'] / (1024*1024):.2f} MB")
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yt-clip",
         description="YouTube Clipping Intelligence Platform CLI",
@@ -939,6 +1037,75 @@ def main() -> None:
     p_auto.add_argument("--dry-run", action=argparse.BooleanOptionalAction, default=True, help="Dry-run autopost handoff simulation (default true)")
     p_auto.add_argument("--db", default="data/jobs.db", help="Path to SQLite database")
     p_auto.add_argument("--output-dir", default="data/rendered_clips", help="Directory for rendered clips and report.html")
+    p_auto.add_argument(
+        "--enable-deadair-pruning",
+        action="store_true",
+        default=False,
+        help="Enable DeadAirPruner micro-cuts during rendering (removes pauses >0.5s and filler words)",
+    )
+    p_auto.add_argument(
+        "--enable-broll",
+        action="store_true",
+        default=False,
+        help="Enable BRollOverlayEngine stock video overlays during rendering",
+    )
+    p_auto.add_argument(
+        "--broll-assets-dir",
+        default=None,
+        help="Directory containing stock B-roll video assets (default: assets/broll)",
+    )
+    p_auto.add_argument(
+        "--enable-cta",
+        action="store_true",
+        default=False,
+        help="Enable animated lower-third Call-to-Action overlay",
+    )
+    p_auto.add_argument(
+        "--cta-text",
+        default="Subscribe to this channel for more",
+        help="Call-to-Action display text",
+    )
+    p_auto.add_argument(
+        "--cta-timing",
+        choices=["end", "intro", "persistent"],
+        default="end",
+        help="Call-to-Action display timing window",
+    )
+    p_auto.add_argument(
+        "--cta-style",
+        choices=["modern_pill", "neon_banner", "minimal"],
+        default="modern_pill",
+        help="Call-to-Action visual style preset",
+    )
+    p_auto.add_argument(
+        "--cta-margin-bottom",
+        type=int,
+        default=440,
+        help="Safe-zone bottom margin in px for CTA overlay placement (default: 440)",
+    )
+    p_auto.add_argument(
+        "--enable-outro-card",
+        action="store_true",
+        default=False,
+        help="Enable dedicated animated outro frame with subscribe sequence and bell chime sound",
+    )
+    p_auto.add_argument(
+        "--outro-duration",
+        type=float,
+        default=2.5,
+        help="Duration of the dedicated outro card in seconds (default: 2.5)",
+    )
+    p_auto.add_argument(
+        "--outro-channel-name",
+        default=None,
+        help="Channel or brand name to display on the outro card",
+    )
+    p_auto.add_argument(
+        "--enable-polish",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable broadcast hook pacing and anti-pop audio transitions (default true)",
+    )
     p_auto.set_defaults(func=cmd_autoprobe)
 
     # Run command
@@ -953,6 +1120,75 @@ def main() -> None:
     p_run.add_argument("--gpu", action="store_true", help="Enable NVIDIA NVENC GPU hardware acceleration")
     p_run.add_argument("--vcodec", default="libx264", choices=["libx264", "h264_nvenc", "hevc_nvenc"], help="Video encoder codec")
     p_run.add_argument("--output-dir", default="data/rendered_clips", help="Directory for rendered clips")
+    p_run.add_argument(
+        "--enable-deadair-pruning",
+        action="store_true",
+        default=False,
+        help="Enable DeadAirPruner micro-cuts during rendering (removes pauses >0.5s and filler words)",
+    )
+    p_run.add_argument(
+        "--enable-broll",
+        action="store_true",
+        default=False,
+        help="Enable BRollOverlayEngine stock video overlays during rendering",
+    )
+    p_run.add_argument(
+        "--broll-assets-dir",
+        default=None,
+        help="Directory containing stock B-roll video assets (default: assets/broll)",
+    )
+    p_run.add_argument(
+        "--enable-cta",
+        action="store_true",
+        default=False,
+        help="Enable animated lower-third Call-to-Action overlay",
+    )
+    p_run.add_argument(
+        "--cta-text",
+        default="Subscribe to this channel for more",
+        help="Call-to-Action display text",
+    )
+    p_run.add_argument(
+        "--cta-timing",
+        choices=["end", "intro", "persistent"],
+        default="end",
+        help="Call-to-Action display timing window",
+    )
+    p_run.add_argument(
+        "--cta-style",
+        choices=["modern_pill", "neon_banner", "minimal"],
+        default="modern_pill",
+        help="Call-to-Action visual style preset",
+    )
+    p_run.add_argument(
+        "--cta-margin-bottom",
+        type=int,
+        default=440,
+        help="Safe-zone bottom margin in px for CTA overlay placement (default: 440)",
+    )
+    p_run.add_argument(
+        "--enable-outro-card",
+        action="store_true",
+        default=False,
+        help="Enable dedicated animated outro frame with subscribe sequence and bell chime sound",
+    )
+    p_run.add_argument(
+        "--outro-duration",
+        type=float,
+        default=2.5,
+        help="Duration of the dedicated outro card in seconds (default: 2.5)",
+    )
+    p_run.add_argument(
+        "--outro-channel-name",
+        default=None,
+        help="Channel or brand name to display on the outro card",
+    )
+    p_run.add_argument(
+        "--enable-polish",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable broadcast hook pacing and anti-pop audio transitions (default true)",
+    )
     p_run.set_defaults(func=cmd_run)
 
     # TTS command
@@ -1002,6 +1238,63 @@ def main() -> None:
     p_tr.add_argument("--limit", type=int, default=10, help="Maximum number of trending videos to display")
     p_tr.set_defaults(func=cmd_trends)
 
+    # MCP Server command
+    p_mcp = subparsers.add_parser(
+        "mcp-server",
+        description="Launch Model Context Protocol (MCP) JSON-RPC 2.0 stdio server",
+        help="Launch Model Context Protocol (MCP) JSON-RPC 2.0 stdio server",
+    )
+    p_mcp.add_argument("--db", default="data/jobs.db", help="Path to SQLite jobs database")
+    p_mcp.add_argument("--assets-dir", default="data/assets", help="Source assets directory")
+    p_mcp.add_argument("--transcripts-dir", default="data/transcripts", help="Transcripts directory")
+    p_mcp.add_argument("--output-dir", default="data/rendered_clips", help="Rendered output directory")
+    p_mcp.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Stderr logging level")
+    p_mcp.set_defaults(func=cmd_mcp_server)
+
+    # Alias: mcp serve
+    p_mcp_sub = subparsers.add_parser("mcp", help="Model Context Protocol management")
+    mcp_subs = p_mcp_sub.add_subparsers(dest="mcp_subcmd", required=True)
+    p_mcp_serve = mcp_subs.add_parser("serve", help="Start stdio MCP server")
+    p_mcp_serve.add_argument("--db", default="data/jobs.db", help="Path to SQLite jobs database")
+    p_mcp_serve.add_argument("--assets-dir", default="data/assets", help="Source assets directory")
+    p_mcp_serve.add_argument("--transcripts-dir", default="data/transcripts", help="Transcripts directory")
+    p_mcp_serve.add_argument("--output-dir", default="data/rendered_clips", help="Rendered output directory")
+    p_mcp_serve.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Stderr logging level")
+    p_mcp_serve.set_defaults(func=cmd_mcp_server)
+
+    # Podcast command
+    p_pod = subparsers.add_parser(
+        "podcast",
+        description="Render broadcast-grade vertical Shorts from podcast footage",
+        help="Render broadcast-grade vertical Shorts from podcast footage",
+    )
+    p_pod.add_argument("--source", "-s", required=True, help="Path to input podcast video")
+    p_pod.add_argument("--out", "-o", required=True, help="Path to save output vertical MP4")
+    p_pod.add_argument("--start", type=float, default=0.0, help="Start offset in seconds (default: 0.0)")
+    p_pod.add_argument("--duration", "-d", type=float, default=30.0, help="Duration in seconds (default: 30.0)")
+    p_pod.add_argument("--mode", "-m", choices=["hybrid", "stacked_always"], default="hybrid", help="Layout mode: hybrid or stacked_always")
+    p_pod.add_argument("--host-side", choices=["left", "right"], default="left", help="Host seat position in wide shot (left or right)")
+    p_pod.add_argument("--preview", action="store_true", help="Fast preview mode (540x960 ultrafast)")
+    p_pod.add_argument("--no-subtitles", action="store_true", help="Disable subtitle burning")
+    p_pod.add_argument("--divider-thickness", type=int, default=4, help="Divider bar thickness in pixels (default: 4)")
+    p_pod.add_argument("--divider-color", default="0x202020", help="Divider bar color in hex (default: 0x202020)")
+    p_pod.add_argument("--enable-cta", action="store_true", help="Enable animated Call-to-Action overlay")
+    p_pod.add_argument("--cta-text", default="Subscribe to this channel for more", help="Custom Call-to-Action text")
+    p_pod.add_argument("--cta-timing", choices=["end", "intro", "persistent"], default="end", help="CTA appearance timing (default: end)")
+    p_pod.add_argument("--cta-style", choices=["modern_pill", "neon_banner", "minimal"], default="modern_pill", help="CTA visual style preset")
+    p_pod.set_defaults(func=cmd_podcast)
+
+    return parser
+
+
+def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+    parser = build_parser()
     parsed = parser.parse_args()
     parsed.func(parsed)
 

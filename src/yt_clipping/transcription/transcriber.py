@@ -10,11 +10,22 @@ import json
 import os
 import sys
 import time
+import dataclasses
 from ..contracts.models import Transcript, TranscriptSegment, WordTimestamp
 from ..contracts.interfaces import Transcriber
 
-
-import dataclasses
+# PyAV 14+/19+ Compatibility Shim: faster-whisper passes metadata_errors="ignore"
+# which newer PyAV versions reject with TypeError.
+try:
+    import av
+    if hasattr(av, "open"):
+        _orig_av_open = av.open
+        def _compat_av_open(*args, **kwargs):
+            kwargs.pop("metadata_errors", None)
+            return _orig_av_open(*args, **kwargs)
+        av.open = _compat_av_open
+except Exception:
+    pass
 
 
 class TranscriptionError(RuntimeError):
@@ -113,6 +124,16 @@ class LocalTranscriber(Transcriber):
     ) -> Tuple[Optional[Transcript], Optional[str]]:
         """Attempts transcription with faster-whisper under specified hardware execution target."""
         try:
+            try:
+                import av
+                if hasattr(av, "open"):
+                    _orig = av.open
+                    def _safe_av(*args, **kwargs):
+                        kwargs.pop("metadata_errors", None)
+                        return _orig(*args, **kwargs)
+                    av.open = _safe_av
+            except Exception:
+                pass
             from faster_whisper import WhisperModel
             start_t = time.time()
             model = WhisperModel(self.model_size, device=device, compute_type=compute_type)

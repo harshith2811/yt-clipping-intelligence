@@ -79,6 +79,24 @@ class SubtitleGenerator:
     """
 
     STYLE_PRESETS: Dict[str, Dict[str, Any]] = {
+        "podcast": {
+            "font_name": "Impact",
+            "font_size": 72,
+            "primary_color": "&H00FFFFFF",     # Crisp White text
+            "secondary_color": "&H0000FFFF",   # Neon Yellow active highlight
+            "outline_color": "&H00000000",     # Deep Black outline
+            "back_color": "&HA0000000",        # Deep drop shadow
+            "bold": -1,
+            "outline": 7,
+            "shadow": 3,
+            "margin_v": 960,                   # Center divider for Split-Screen Podcast layouts
+            "chunk_size": 2,                   # Rapid 2-word mobile retention pacing
+            "word_highlight": True,
+            "bounce_animation": True,
+            "uppercase": True,
+            "keyword_emphasis": True,
+            "emoji_badges": False,
+        },
         "hormozi": {
             "font_name": "Impact",
             "font_size": 72,

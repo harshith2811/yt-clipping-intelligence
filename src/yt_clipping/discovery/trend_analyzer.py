@@ -51,10 +51,12 @@ class TrendAnalyzer:
         like_count: int = 0,
         comment_count: int = 0,
         creator: Optional[CreatorSource] = None,
+        channel_views: Optional[List[int]] = None,
     ) -> TrendReport:
         """
         Computes comprehensive virality telemetry for any YouTube video.
         Separates view velocity from audience resonance and avoids false claims.
+        Optionally uses Channel Median Multipliers from OutlierMultiplier if channel history is provided.
         """
         now = datetime.now(timezone.utc)
         try:
@@ -69,9 +71,24 @@ class TrendAnalyzer:
         # 1. Hourly View Velocity
         velocity = float(view_count) / age_hours
 
-        # 2. Channel Baseline Normalization (BUG-11 fix)
-        has_creator_history = creator is not None and creator.baseline_views > 0
-        baseline_total = creator.baseline_views if has_creator_history else self.POPULATION_BASELINE_VIEWS
+        # 2. Channel Baseline Normalization (using Channel Median Multipliers when available)
+        from .outlier import OutlierMultiplier
+        outlier_rep = None
+        if channel_views and len(channel_views) >= 4:
+            multiplier = OutlierMultiplier()
+            outlier_rep = multiplier.calculate_virality_multiple(
+                video_views=view_count,
+                channel_views=channel_views,
+                video_id=video_id,
+                channel_id=channel_id,
+                creator=creator,
+            )
+            baseline_total = outlier_rep.channel_median_views
+            has_creator_history = True
+        else:
+            has_creator_history = creator is not None and creator.baseline_views > 0
+            baseline_total = creator.baseline_views if has_creator_history else self.POPULATION_BASELINE_VIEWS
+
         baseline_hourly_velocity = max(baseline_total / 48.0, 10.0)
         velocity_multiplier = velocity / baseline_hourly_velocity
 
@@ -90,12 +107,13 @@ class TrendAnalyzer:
         is_high_resonance = like_ratio >= 4.0 and (safe_views >= 500)
         resonance_note = f" High audience resonance (LVR={like_ratio:.1f}%)." if is_high_resonance else ""
         baseline_note = "" if has_creator_history else " (estimated from population baseline)"
+        outlier_tag = f" Outlier breakout at {outlier_rep.virality_multiple:.1f}x channel median." if (outlier_rep and outlier_rep.is_algorithmic_breakout) else ""
 
-        if velocity_multiplier >= 3.0 or virality_index >= 85.0:
+        if (outlier_rep and outlier_rep.is_algorithmic_breakout) or velocity_multiplier >= 3.0 or virality_index >= 85.0:
             classification = "VIRAL_EXPLOSION"
             summary = (
                 f"Breakout outlier performing at {velocity_multiplier:.1f}x channel baseline{baseline_note}. "
-                f"Velocity: {velocity:,.0f} views/hr.{resonance_note}"
+                f"Velocity: {velocity:,.0f} views/hr.{resonance_note}{outlier_tag}"
             )
         elif velocity_multiplier >= 1.8 or virality_index >= 70.0:
             classification = "TRENDING_HIGH"
@@ -136,6 +154,7 @@ class TrendAnalyzer:
         self,
         video_id: str,
         creator: Optional[CreatorSource] = None,
+        channel_views: Optional[List[int]] = None,
     ) -> Optional[TrendReport]:
         """Fetches live video statistics via YouTube Data API v3 and evaluates virality."""
         if not self.api_key:
@@ -169,6 +188,7 @@ class TrendAnalyzer:
                 like_count=int(stats.get("likeCount", 0)),
                 comment_count=int(stats.get("commentCount", 0)),
                 creator=creator,
+                channel_views=channel_views,
             )
         except Exception:
             return None

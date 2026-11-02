@@ -1,11 +1,16 @@
-# Byte-compiled / optimized / DLL files
+# ==============================================================================
+# YouTube Clipping Intelligence Platform - .gitignore
+# Production-Grade Git Exclusion Matrix
+# ==============================================================================
+
+# --- Python Bytecode & Optimization ---
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 
-# Distribution / packaging
+# --- Distribution, Packaging & Build Artifacts ---
 build/
 develop-eggs/
 dist/
@@ -21,18 +26,48 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual environments
+# --- Virtual Environments ---
 .venv/
 venv/
 ENV/
 env/
+venv*/
+ENV*/
+env*/
 
-# Research upstream clones
-research/upstream/
+# --- Testing, Coverage & Profiling ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.cover
+*.py,cover
+.hypothesis/
+.nox/
+.tox/
 
-# Media assets, rendered clips, and runtime pipeline storage
+# --- Static Analysis & Linters ---
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# --- Multi-Agent Swarm, Subagent Logs & Scratchpads ---
+.agents/
+scratch/
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# --- Media Assets & Pipeline Storage ---
 data/
+!data/**/.gitkeep
+!data/.gitkeep
+
+# Raw and Rendered Media Extensions
 *.mp4
 *.mkv
 *.webm
@@ -40,10 +75,17 @@ data/
 *.mov
 *.wav
 *.mp3
+*.flac
+*.m4a
+*.aac
 *.ass
 *.srt
+*.vtt
 
-# SQLite databases & journals
+# --- SQLite Databases, WAL Journals & Caches ---
+data/*.db
+data/*.sqlite
+data/*.sqlite3
 *.db
 *.sqlite
 *.sqlite3
@@ -51,25 +93,48 @@ data/
 *.db-wal
 *.db-shm
 
-# Testing, logs, and coverage
-.pytest_cache/
-.coverage
-htmlcov/
-*.log
+# --- Machine Learning Models, Checkpoints & Weights ---
+weights/
+models/*.pt
+models/*.pth
+models/*.bin
+models/*.onnx
+models/*.engine
+models/*.safetensors
+models/*.tflite
+models/*.h5
+models/*.pb
 
-# Environment variables & secrets (CRITICAL: never commit credentials)
+# --- Upstream Clones & Third-Party Research Repositories ---
+research/upstream/
+
+# --- Environment Variables, API Keys & Secret Tokens ---
+# CRITICAL: Never commit operational API tokens or credentials
 .env
+.env.local
+.env.*.local
 *.secret
 *.key
+*.pem
+*.crt
+client_secret*.json
+credentials.json
+*service-account*.json
 
-# IDE and OS artifacts
+# --- IDE, Editor & OS Artifacts ---
 .vscode/
 .idea/
+*.sublime-project
+*.sublime-workspace
 .DS_Store
-Thumbs.db
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 ehthumbs.db
-desktop.ini
-
-# ML Models & Checkpoints
-models/*.pt
-models/*.onnx
+Thumbs.db
+[Dd]esktop.ini
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

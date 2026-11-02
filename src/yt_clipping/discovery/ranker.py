@@ -13,6 +13,7 @@ import sqlite3
 from ..contracts.models import VideoCandidate, MetricSnapshot, CreatorSource
 from ..contracts.interfaces import MetricObserver
 from ..orchestration.db import DatabaseManager
+from .outlier import OutlierMultiplier
 
 
 class PublicMetricRanker(MetricObserver):
@@ -22,14 +23,17 @@ class PublicMetricRanker(MetricObserver):
     - Minimum observation intervals to prevent division by near-zero time intervals
     - Channel Baseline Normalization (prevents large channels from dominating discovery)
     - Recency Decay (exponential half-life of 48 hours)
+    - Channel Median Outlier Multipliers (>= 3.0x median breakouts)
     """
 
     MIN_OBSERVATION_SECONDS = 30.0  # Minimum interval to avoid noise spikes
 
-    def __init__(self, db_path: str = "data/jobs.db"):
+    def __init__(self, db_path: str = "data/jobs.db", outlier_multiplier: Optional[OutlierMultiplier] = None):
         self.db = DatabaseManager(db_path)
+        self.outlier_multiplier = outlier_multiplier or OutlierMultiplier()
         self._snapshots_cache: Dict[str, List[MetricSnapshot]] = {}
         self._load_cached_snapshots()
+
 
     def _load_cached_snapshots(self) -> None:
         conn = self.db.get_connection()
@@ -164,9 +168,11 @@ class PublicMetricRanker(MetricObserver):
         candidate: VideoCandidate,
         creator: Optional[CreatorSource] = None,
         as_of: Optional[datetime] = None,
+        channel_views: Optional[List[int]] = None,
     ) -> float:
         """
         Computes normalized discovery score (0.0 to 100.0).
+        If channel_views with >= 4 uploads is provided, normalizes against Channel Median Multipliers.
         """
         now = as_of or datetime.now(timezone.utc)
         try:
@@ -178,8 +184,20 @@ class PublicMetricRanker(MetricObserver):
         # 1. Recency Score (Exponential half-life of 48 hours)
         recency_score = math.exp(-0.693 * (age_hours / 48.0)) * 100.0
 
-        # 2. Velocity Score (Relative to baseline)
-        baseline = creator.baseline_views if creator and creator.baseline_views > 0 else 10000.0
+        # 2. Velocity Score (Relative to baseline or median)
+        outlier_report = None
+        if channel_views and len(channel_views) >= self.outlier_multiplier.min_baseline_videos:
+            outlier_report = self.outlier_multiplier.calculate_virality_multiple(
+                video_views=candidate.view_count,
+                channel_views=channel_views,
+                video_id=candidate.video_id,
+                channel_id=candidate.creator_id,
+                creator=creator,
+            )
+            baseline = outlier_report.channel_median_views
+        else:
+            baseline = creator.baseline_views if creator and creator.baseline_views > 0 else 10000.0
+
         snapshots = self._snapshots_cache.get(candidate.video_id, [])
 
         has_observed_snapshots = len(snapshots) >= 2
@@ -200,22 +218,36 @@ class PublicMetricRanker(MetricObserver):
 
         # Composite score: Recency (35%), Velocity (50%), Engagement (15%)
         composite = (0.35 * recency_score) + (0.50 * velocity_score) + (0.15 * engagement_score)
+
+        # Breakout boost if proven algorithmic breakout (>= 3.0x channel median)
+        if outlier_report and outlier_report.is_algorithmic_breakout:
+            composite = min(composite * 1.15, 100.0)
+
         final_score = round(min(max(composite, 0.0), 100.0), 2)
 
         velocity_type = "observed_velocity" if has_observed_snapshots else "lifetime_pace"
         candidate.discovery_score = final_score
+
+        outlier_note = ""
+        if outlier_report and outlier_report.is_algorithmic_breakout:
+            outlier_note = f", Outlier={outlier_report.virality_multiple:.1f}x median breakout"
+
         candidate.discovery_rationale = (
             f"Score {final_score}/100: Age={age_hours:.1f}h (recency={recency_score:.1f}), "
             f"velocity_ratio={velocity_ratio:.2f}x baseline ({velocity_type}={velocity:.0f}/hr), "
-            f"engagement={engagement_score:.1f}."
+            f"engagement={engagement_score:.1f}{outlier_note}."
         )
         return final_score
 
     def rank_candidates(
-        self, candidates: List[VideoCandidate], creators: Dict[str, CreatorSource]
+        self,
+        candidates: List[VideoCandidate],
+        creators: Dict[str, CreatorSource],
+        channel_histories: Optional[Dict[str, List[int]]] = None,
     ) -> List[VideoCandidate]:
         """Ranks candidates descending by discovery score."""
         for c in candidates:
             creator = creators.get(c.creator_id)
-            self.compute_discovery_score(c, creator)
+            c_views = channel_histories.get(c.creator_id) if channel_histories else None
+            self.compute_discovery_score(c, creator, channel_views=c_views)
         return sorted(candidates, key=lambda x: x.discovery_score, reverse=True)

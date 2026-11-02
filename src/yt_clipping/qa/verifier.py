@@ -50,7 +50,8 @@ class MediaQualityVerifier(QualityVerifier):
         file_path = rendered_clip.file_path
         errors: List[str] = []
         warnings: List[str] = []
-        expected_dur = candidate.duration_seconds
+        # If the rendered clip has a duration override (e.g. animated outro card appended), respect it
+        expected_dur = getattr(rendered_clip, "duration_seconds", None) or candidate.duration_seconds
 
         # 1. Physical existence
         if not os.path.exists(file_path):
