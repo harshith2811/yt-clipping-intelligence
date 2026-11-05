@@ -1,54 +1,84 @@
 services:
   # ==============================================================================
-  # 24/7 Autonomous Discovery & Clipping Daemon
+  # Turnkey Live Web Studio & REST API (Ready to Play Live)
+  # Interactive 9:16 vertical short milking, instant preview, face tracking,
+  # and live browser video playback on http://localhost:8000
+  # ==============================================================================
+  studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yt-clipping-studio
+    restart: unless-stopped
+    command: ["studio"]
+    ports:
+      - "8000:8000"
+      - "8088:8088"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=8000
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-flash-lite-latest}
+      - DEFAULT_LAYOUT_MODE=active_speaker
+      - DEFAULT_SUBTITLE_PRESET=hormozi
+      - POLL_INTERVAL=${POLL_INTERVAL:-300}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video, compute, utility]
+
+  # ==============================================================================
+  # 24/7 Autonomous Discovery & Clipping Daemon (Optional Background Profile)
   # Continuously polls creator channels via RSS/API and dispatches jobs
   # ==============================================================================
-  clipping-daemon:
+  daemon:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: yt-clipping-daemon
     restart: unless-stopped
     command: ["daemon"]
-    ports:
-      - "8088:8088"
+    profiles: ["daemon", "full"]
     volumes:
       - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-flash-lite-latest}
       - POLL_INTERVAL=${POLL_INTERVAL:-300}
-      - DEFAULT_LAYOUT_MODE=blur_background
+      - DEFAULT_LAYOUT_MODE=active_speaker
       - DEFAULT_SUBTITLE_PRESET=hormozi
-      - OMNIPOST_BASE_URL=${OMNIPOST_BASE_URL:-http://host.docker.internal:3300}
-      - OMNIPOST_API_KEY=${OMNIPOST_API_KEY:-}
-      - AUTOMATION_SECRET_KEY=${AUTOMATION_SECRET_KEY:-}
 
   # ==============================================================================
-  # 24/7 Priority Job Queue Processing Worker
+  # 24/7 Priority Job Queue Processing Worker (Optional Background Profile)
   # Leases and processes rendering, AI framing, transcription, and QA verification
   # ==============================================================================
-  clipping-worker:
+  worker:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: yt-clipping-worker
     restart: unless-stopped
     command: ["worker"]
+    profiles: ["worker", "full"]
     volumes:
       - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-flash-lite-latest}
       - POLL_INTERVAL=5.0
-      - OMNIPOST_BASE_URL=${OMNIPOST_BASE_URL:-http://host.docker.internal:3300}
-      - OMNIPOST_API_KEY=${OMNIPOST_API_KEY:-}
-      - AUTOMATION_SECRET_KEY=${AUTOMATION_SECRET_KEY:-}
 
   # ==============================================================================
-  # Model Context Protocol (MCP) Server
+  # Model Context Protocol (MCP) Server (Optional MCP Profile)
   # Exposes JSON-RPC 2.0 tools for AI agents and agentic IDEs
   # ==============================================================================
   mcp-server:
@@ -65,4 +95,4 @@ services:
       - PYTHONUNBUFFERED=1
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - OMNIPOST_BASE_URL=${OMNIPOST_BASE_URL:-http://host.docker.internal:3300}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-flash-lite-latest}

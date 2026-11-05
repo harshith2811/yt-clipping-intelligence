@@ -38,6 +38,7 @@ from .commands import (
     cmd_cleanup,
     cmd_podcast,
     cmd_mcp_server,
+    cmd_studio,
 )
 
 __all__ = [
@@ -68,6 +69,7 @@ __all__ = [
     "cmd_cleanup",
     "cmd_podcast",
     "cmd_mcp_server",
+    "cmd_studio",
 ]
 
 

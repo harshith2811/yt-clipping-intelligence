@@ -244,9 +244,30 @@ Edit `.env` to configure your settings (optional):
 ```dotenv
 YOUTUBE_API_KEY=AIzaSy...YourKeyHere      # Optional (RSS polling uses 0 quota)
 GEMINI_API_KEY=AIzaSy...YourKeyHere       # Optional (Enables Gemini multimodal scoring)
-DEFAULT_LAYOUT_MODE=blur_background
+DEFAULT_LAYOUT_MODE=active_speaker
 CRF_QUALITY=22
 AUTO_APPROVE_THRESHOLD=65.0
+```
+
+### ⚡ Single-Container Turnkey Live Launch (Ready to Play Live)
+Run the entire platform inside a single GPU/CPU-accelerated Docker container. The live Web Studio dashboard, REST API, pre-baked AI models, and background rendering engine start immediately on port 8000:
+
+```bash
+# Option 1: Docker Compose (Recommended)
+docker compose up
+
+# Option 2: Standalone Docker Run
+docker build -t yt-clipping-intelligence .
+docker run -d --name yt-studio -p 8000:8000 -v ./data:/app/data --gpus all yt-clipping-intelligence
+
+# Access the Live Studio Dashboard in your browser:
+# http://localhost:8000
+```
+
+### 🖥️ Native CLI Web Studio Launch
+You can also launch the Web Studio directly via the CLI:
+```bash
+yt-clip studio --host 0.0.0.0 --port 8000
 ```
 
 ---

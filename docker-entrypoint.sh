@@ -14,16 +14,22 @@ mkdir -p /app/data/assets \
          /app/data/handoffs \
          /app/data/temp
 
+MODE="${1:-studio}"
+
 echo "================================================================================"
-echo " YouTube Clipping Intelligence Platform - 24/7 Cloud Worker"
+echo " YouTube Clipping Intelligence Platform - Turnkey Live Production Container"
 echo " Time: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-echo " Mode: ${1:-daemon}"
+echo " Mode: ${MODE}"
 echo "================================================================================"
 
 # Trap termination signals for graceful container shutdown
 trap 'echo "Received termination signal. Shutting down worker gracefully..."; exit 0' SIGTERM SIGINT
 
-case "$1" in
+case "$MODE" in
+  studio|live)
+    echo "[*] Launching Turnkey Web Studio Dashboard & REST API on http://0.0.0.0:${PORT:-8000}..."
+    exec python -m yt_clipping studio --host 0.0.0.0 --port "${PORT:-8000}"
+    ;;
   daemon)
     echo "[*] Launching 24/7 Autonomous Discovery & Clipping Daemon..."
     POLL_INTERVAL="${POLL_INTERVAL:-300}"

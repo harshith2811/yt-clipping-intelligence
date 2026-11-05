@@ -26,6 +26,7 @@ from .commands import (
     cmd_cleanup,
     cmd_podcast,
     cmd_mcp_server,
+    cmd_studio,
 )
 
 
@@ -403,5 +404,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_pod.add_argument("--cta-timing", choices=["end", "intro", "persistent"], default="end", help="CTA appearance timing (default: end)")
     p_pod.add_argument("--cta-style", choices=["modern_pill", "neon_banner", "minimal"], default="modern_pill", help="CTA visual style preset")
     p_pod.set_defaults(func=cmd_podcast)
+
+    # Studio command: Live Web Studio Dashboard and REST API
+    p_studio = subparsers.add_parser(
+        "studio",
+        description="Launch the interactive Web Studio Dashboard and REST API",
+        help="Launch the interactive Web Studio Dashboard and REST API",
+    )
+    p_studio.add_argument("--host", default="0.0.0.0", help="Host interface to bind (default: 0.0.0.0)")
+    p_studio.add_argument("--port", type=int, default=8000, help="Port to listen on (default: 8000)")
+    p_studio.set_defaults(func=cmd_studio)
 
     return parser

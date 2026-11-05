@@ -71,11 +71,11 @@ COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
 # Create durable storage volume mount points
-RUN mkdir -p /app/data /app/data/rendered_clips /app/data/assets /app/data/transcripts /app/data/heatmaps /app/data/handoffs
+RUN mkdir -p /app/data /app/data/rendered_clips /app/data/assets /app/data/transcripts /app/data/heatmaps /app/data/handoffs /app/data/temp
 VOLUME ["/app/data"]
 
-# Expose ports: 8088 (WebSub push alert listener), 8000 (Optional Health/Metrics/MCP)
-EXPOSE 8088 8000
+# Expose ports: 8000 (Interactive Live Web Studio Dashboard & REST API), 8088 (WebSub push alert listener)
+EXPOSE 8000 8088
 
 # Healthcheck probe verifying platform integrity
 HEALTHCHECK --interval=60s --timeout=15s --start-period=30s --retries=3 \
@@ -83,5 +83,5 @@ HEALTHCHECK --interval=60s --timeout=15s --start-period=30s --retries=3 \
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
-# Default command: 24/7 autonomous discovery and clipping daemon
-CMD ["daemon"]
+# Default command: Turnkey Live Web Studio Dashboard ready to play on live
+CMD ["studio"]

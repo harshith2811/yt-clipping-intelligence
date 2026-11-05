@@ -31,6 +31,8 @@ dependencies = [
     "numpy>=1.26.0",
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.22.0",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +42,7 @@ dev = [
 
 [project.scripts]
 yt-clip = "yt_clipping.cli.master_cli:main"
+yt-clip-studio = "yt_clipping.web.server:start_server"
 channel-watcher = "yt_clipping.discovery.channel_watcher:main"
 pinger-daemon = "yt_clipping.discovery.pinger_daemon:main"
 

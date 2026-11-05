@@ -16,6 +16,7 @@ from .assets import (
     cmd_cleanup,
 )
 from .podcast import cmd_podcast, cmd_mcp_server
+from .studio import cmd_studio
 
 __all__ = [
     "build_pipeline",
@@ -43,4 +44,5 @@ __all__ = [
     "cmd_cleanup",
     "cmd_podcast",
     "cmd_mcp_server",
+    "cmd_studio",
 ]
