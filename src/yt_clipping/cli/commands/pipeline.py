@@ -129,7 +129,9 @@ def cmd_run(args: argparse.Namespace) -> None:
     broll_enabled = getattr(args, "enable_broll", False)
     broll_dir = getattr(args, "broll_assets_dir", None)
 
-    print(f"[*] Starting pipeline execution for video: {video_id}")
+    max_clips = max(1, getattr(args, "max_clips", 1) or 1)
+
+    print(f"[*] Starting pipeline execution for video: {video_id} (target clips: {max_clips})")
     print(f"[*] Profile: {profile.name} (layout={profile.layout_mode}, vcodec={profile.vcodec}, subs={profile.subtitle_preset}), dry_run={args.dry_run}, bounds=[{min_dur:.0f}s - {max_dur:.0f}s]")
     if deadair_enabled:
         print("[*] Enhancement: Dead-Air Pruning enabled")
@@ -141,6 +143,40 @@ def cmd_run(args: argparse.Namespace) -> None:
         print(f"[*] Enhancement: Dedicated Animated Outro Card enabled (channel={outro_channel or 'auto'}, {outro_dur}s with bell chime)")
 
     try:
+        if max_clips > 1 and hasattr(pipeline, "process_video_multi"):
+            jobs = pipeline.process_video_multi(
+                video_id=video_id,
+                max_clips=max_clips,
+                profile=profile,
+                dry_run=args.dry_run,
+                auto_approve_threshold=args.threshold,
+                min_duration=min_dur,
+                max_duration=max_dur,
+                enable_deadair_pruning=deadair_enabled,
+                enable_broll=broll_enabled,
+                broll_assets_dir=broll_dir,
+            )
+            print(f"\n[SUCCESS] Pipeline Completed: Rendered {len(jobs)} Viral Clips!")
+            for idx, job in enumerate(jobs, 1):
+                print(f"\n--- Clip #{idx} ({job.job_id}) ---")
+                if job.candidate:
+                    print(f"Window: {job.candidate.start_seconds:.1f}s - {job.candidate.end_seconds:.1f}s ({job.candidate.duration_seconds:.1f}s)")
+                    print(f"Score: {job.candidate.score}/100 | {job.candidate.rationale}")
+                if job.rendered_clip:
+                    print(f"Rendered Clip: {job.rendered_clip.file_path}")
+                if job.qa_report:
+                    print(f"QA Status: {job.qa_report.status}")
+
+            if jobs:
+                try:
+                    from ...reporting.html_report import ExecutiveReportGenerator
+                    report_path = os.path.join(getattr(args, "output_dir", "data/rendered_clips"), f"report_{video_id}.html")
+                    ExecutiveReportGenerator.generate_html_report(jobs[0], output_path=report_path)
+                    print(f"\nExecutive Report: {report_path}")
+                except Exception:
+                    pass
+            return
+
         job = pipeline.process_video(
             video_id=video_id,
             profile=profile,

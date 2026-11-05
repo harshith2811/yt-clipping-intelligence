@@ -449,203 +449,350 @@ class ClippingPipeline:
             except Exception:
                 pass
 
-            # Stage 6: Review / Approval Gate (Stand-Alone Short Viability Check)
-            viability_checkpoint = {}
-            if self.viability_validator:
-                try:
-                    viability_report = self.viability_validator.validate_candidate(top_candidate, transcript)
-                    viability_checkpoint["viability"] = viability_report.to_dict()
-                    top_candidate.loop_affinity_score = round(viability_report.loop_hook_score * 10.0, 1)
-                    if not viability_report.is_viable:
-                        top_candidate.approval_status = "REJECTED"
-                        critique_str = "; ".join(viability_report.reasons_for_rejection)
-                        top_candidate.rationale = f"{top_candidate.rationale} [Viability Rejected: {critique_str}]".strip()
-                    elif top_candidate.score >= auto_approve_threshold:
-                        top_candidate.approval_status = "APPROVED"
-                    else:
-                        top_candidate.approval_status = "PENDING_APPROVAL"
-                except Exception:
-                    if top_candidate.score >= auto_approve_threshold:
-                        top_candidate.approval_status = "APPROVED"
-                    else:
-                        top_candidate.approval_status = "PENDING_APPROVAL"
-            else:
-                if top_candidate.score >= auto_approve_threshold:
-                    top_candidate.approval_status = "APPROVED"
-                else:
-                    top_candidate.approval_status = "PENDING_APPROVAL"
-
-            # Stage 6b: Broadcast Hook Pacing Polish & Word Boundary Protection
-            if getattr(render_profile, "enable_pacing_polish", False) and transcript and not enable_deadair_pruning:
-                top_candidate = apply_pacing_polish(top_candidate, transcript)
-
-            checkpoint_payload = {
-                "approval_status": top_candidate.approval_status,
-                "loop_affinity_score": getattr(top_candidate, "loop_affinity_score", 0.0),
-            }
-            checkpoint_payload.update(viability_checkpoint)
-            self.journal.record_stage_checkpoint(
-                job, JobStage.REVIEWED, checkpoint_payload
+            return self._process_candidate_lifecycle(
+                job=job,
+                candidate=top_candidate,
+                transcript=transcript,
+                asset_path=asset_path,
+                probe_info=probe_info,
+                manifest=manifest,
+                render_profile=render_profile,
+                auto_approve_threshold=auto_approve_threshold,
+                dry_run=dry_run,
+                enable_deadair_pruning=enable_deadair_pruning,
+                enable_broll=enable_broll,
+                broll_assets_dir=broll_assets_dir,
             )
-
-
-            # BUG-26 fix: Validate candidate bounds against actual source duration prior to rendering
-            source_dur = probe_info.get("duration", transcript.duration_seconds) if probe_info else transcript.duration_seconds
-            if not top_candidate.validate_bounds(source_dur):
-                err = (
-                    f"Candidate '{top_candidate.candidate_id}' bounds [{top_candidate.start_seconds:.2f}, {top_candidate.end_seconds:.2f}] "
-                    f"exceed or violate source media duration {source_dur:.2f}s."
-                )
-                self.journal.mark_failed(job, err)
-                raise ValueError(err)
-
-            # Stage 7: Vertical Video Rendering (with checkpoint resumption)
-            rendered_clip = None
-            if JobStage.RENDERED.value in job.checkpoints and job.rendered_clip:
-                if os.path.exists(job.rendered_clip.file_path) and os.path.getsize(job.rendered_clip.file_path) > 0:
-                    rendered_clip = job.rendered_clip
-
-            if not rendered_clip:
-                active_source_path = asset_path
-                active_candidate = top_candidate
-                active_transcript = transcript
-                deadair_telemetry = None
-
-                # Pre-render micro-jump-cuts via DeadAirPruner if enabled
-                if enable_deadair_pruning and self.dead_air_pruner and transcript:
-                    prune_res = self.dead_air_pruner.prune_candidate(top_candidate, transcript)
-                    deadair_telemetry = prune_res.to_dict()
-                    if prune_res.keep_intervals and (top_candidate.duration_seconds - prune_res.pruned_duration > 0.1):
-                        pruned_tmp_path = os.path.join(self.output_dir, f"pruned_{top_candidate.candidate_id}.mp4")
-                        os.makedirs(self.output_dir, exist_ok=True)
-                        v_expr, a_expr = self.dead_air_pruner.generate_select_expressions(
-                            prune_res.keep_intervals, offset_seconds=0.0
-                        )
-                        if os.path.exists(asset_path) and os.path.getsize(asset_path) > 1000:
-                            cut_cmd = [
-                                "ffmpeg", "-y", "-i", asset_path,
-                                "-filter_complex", f"[0:v]{v_expr}[v];[0:a]{a_expr}[a]",
-                                "-map", "[v]", "-map", "[a]",
-                                "-c:v", "libx264", "-preset", "ultrafast",
-                                "-c:a", "aac",
-                                pruned_tmp_path,
-                            ]
-                            try:
-                                res = subprocess.run(cut_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                                if res.returncode == 0 and os.path.exists(pruned_tmp_path) and os.path.getsize(pruned_tmp_path) > 0:
-                                    active_source_path = pruned_tmp_path
-                            except Exception:
-                                pass
-
-                        top_candidate.start_seconds = 0.0
-                        top_candidate.end_seconds = prune_res.pruned_duration
-                        top_candidate.duration_seconds = prune_res.pruned_duration
-                        active_transcript = remap_transcript_for_keep_intervals(
-                            transcript,
-                            prune_res.keep_intervals,
-                            candidate_start=0.0,
-                        )
-
-                rendered_clip = self.renderer.render_clip(
-                    source_path=active_source_path,
-                    candidate=top_candidate,
-                    profile=render_profile,
-                    output_dir=self.output_dir,
-                    transcript=active_transcript,
-                )
-
-                # Post-render Automated B-Roll Overlay if enabled
-                broll_telemetry = None
-                if enable_broll and self.b_roll_engine and active_transcript:
-                    words = []
-                    for seg in active_transcript.segments:
-                        words.extend(seg.words)
-                    broll_out_path = os.path.join(
-                        self.output_dir,
-                        f"{os.path.splitext(os.path.basename(rendered_clip.file_path))[0]}_broll.mp4"
-                    )
-                    broll_res = self.b_roll_engine.apply_broll_overlay(
-                        video_path=rendered_clip.file_path,
-                        output_path=broll_out_path,
-                        words=words,
-                        candidate=top_candidate,
-                        clip_start=0.0 if enable_deadair_pruning else top_candidate.start_seconds,
-                        clip_end=top_candidate.duration_seconds if enable_deadair_pruning else top_candidate.end_seconds,
-                        assets_dir=broll_assets_dir,
-                    )
-                    broll_telemetry = broll_res.to_dict()
-                    if broll_res.applied:
-                        rendered_clip.file_path = broll_res.output_video_path
-                        if broll_res.file_hash:
-                            rendered_clip.file_hash = broll_res.file_hash
-
-                job.rendered_clip = rendered_clip
-                checkpoint_payload = {
-                    "clip_id": rendered_clip.clip_id,
-                    "file_path": rendered_clip.file_path,
-                    "sha256": rendered_clip.file_hash,
-                }
-                if deadair_telemetry:
-                    checkpoint_payload["deadair_pruned"] = deadair_telemetry
-                if broll_telemetry:
-                    checkpoint_payload["broll_overlay"] = broll_telemetry
-
-                self.journal.record_stage_checkpoint(
-                    job,
-                    JobStage.RENDERED,
-                    checkpoint_payload,
-                )
-
-            # Stage 8: Post-Render Quality Assurance Verification (with checkpoint resumption)
-            qa_report = None
-            if JobStage.QA_VERIFIED.value in job.checkpoints and job.qa_report and job.qa_report.status != "FAILED":
-                qa_report = job.qa_report
-
-            if not qa_report:
-                qa_report = self.verifier.verify_clip(rendered_clip, top_candidate)
-                job.qa_report = qa_report
-                if qa_report.status == "FAILED":
-                    err = f"QA verification failed for clip '{rendered_clip.clip_id}': {qa_report.errors}"
-                    self.journal.mark_failed(job, err)
-                    raise RuntimeError(err)
-
-                self.journal.record_stage_checkpoint(
-                    job, JobStage.QA_VERIFIED, {"qa_status": qa_report.status, "errors": qa_report.errors, "warnings": qa_report.warnings}
-                )
-
-            # Stage 9: Autopost Handoff (with checkpoint resumption)
-            handoff_receipt = None
-            if JobStage.HANDED_OFF.value in job.checkpoints and job.handoff_receipt:
-                handoff_receipt = job.handoff_receipt
-            else:
-                handoff_receipt = self.publisher.publish_clip(
-                    rendered_clip=rendered_clip,
-                    candidate=top_candidate,
-                    rights_manifest=manifest,
-                    qa_report=qa_report,
-                    dry_run=dry_run,
-                )
-                job.handoff_receipt = handoff_receipt
-
-            if handoff_receipt.status in ["DELIVERED", "DRY_RUN_SIMULATED", "DUPLICATE_SKIPPED"]:
-                job.current_stage = JobStage.HANDED_OFF
-                job.status = JobStatus.SUCCEEDED
-            else:
-                job.status = JobStatus.FAILED
-                job.error_message = f"Handoff returned status '{handoff_receipt.status}'."
-
-            self.journal.record_stage_checkpoint(
-                job,
-                JobStage.HANDED_OFF,
-                {"receipt_id": handoff_receipt.receipt_id, "status": handoff_receipt.status, "dry_run": dry_run},
-            )
-
-            return job
 
         except Exception as e:
             if job.status != JobStatus.FAILED:
                 self.journal.mark_failed(job, str(e))
             raise
+
+    def _process_candidate_lifecycle(
+        self,
+        job: ClipJob,
+        candidate: HighlightCandidate,
+        transcript: Transcript,
+        asset_path: str,
+        probe_info: Optional[Dict[str, Any]],
+        manifest: Optional[Any],
+        render_profile: RenderProfile,
+        auto_approve_threshold: float,
+        dry_run: bool,
+        enable_deadair_pruning: bool,
+        enable_broll: bool,
+        broll_assets_dir: Optional[str],
+    ) -> ClipJob:
+        job.candidate = candidate
+
+        # Stage 6: Review / Approval Gate (Stand-Alone Short Viability Check)
+        viability_checkpoint = {}
+        if self.viability_validator:
+            try:
+                viability_report = self.viability_validator.validate_candidate(candidate, transcript)
+                viability_checkpoint["viability"] = viability_report.to_dict()
+                candidate.loop_affinity_score = round(viability_report.loop_hook_score * 10.0, 1)
+                if not viability_report.is_viable:
+                    candidate.approval_status = "REJECTED"
+                    critique_str = "; ".join(viability_report.reasons_for_rejection)
+                    candidate.rationale = f"{candidate.rationale} [Viability Rejected: {critique_str}]".strip()
+                elif candidate.score >= auto_approve_threshold:
+                    candidate.approval_status = "APPROVED"
+                else:
+                    candidate.approval_status = "PENDING_APPROVAL"
+            except Exception:
+                if candidate.score >= auto_approve_threshold:
+                    candidate.approval_status = "APPROVED"
+                else:
+                    candidate.approval_status = "PENDING_APPROVAL"
+        else:
+            if candidate.score >= auto_approve_threshold:
+                candidate.approval_status = "APPROVED"
+            else:
+                candidate.approval_status = "PENDING_APPROVAL"
+
+        # Stage 6b: Broadcast Hook Pacing Polish & Word Boundary Protection
+        if getattr(render_profile, "enable_pacing_polish", False) and transcript and not enable_deadair_pruning:
+            candidate = apply_pacing_polish(candidate, transcript)
+
+        checkpoint_payload = {
+            "approval_status": candidate.approval_status,
+            "loop_affinity_score": getattr(candidate, "loop_affinity_score", 0.0),
+        }
+        checkpoint_payload.update(viability_checkpoint)
+        self.journal.record_stage_checkpoint(
+            job, JobStage.REVIEWED, checkpoint_payload
+        )
+
+        # Validate candidate bounds against actual source duration prior to rendering
+        source_dur = probe_info.get("duration", transcript.duration_seconds) if probe_info else transcript.duration_seconds
+        if not candidate.validate_bounds(source_dur):
+            err = (
+                f"Candidate '{candidate.candidate_id}' bounds [{candidate.start_seconds:.2f}, {candidate.end_seconds:.2f}] "
+                f"exceed or violate source media duration {source_dur:.2f}s."
+            )
+            self.journal.mark_failed(job, err)
+            raise ValueError(err)
+
+        # Stage 7: Vertical Video Rendering (with checkpoint resumption)
+        rendered_clip = None
+        if JobStage.RENDERED.value in job.checkpoints and job.rendered_clip:
+            if os.path.exists(job.rendered_clip.file_path) and os.path.getsize(job.rendered_clip.file_path) > 0:
+                rendered_clip = job.rendered_clip
+
+        if not rendered_clip:
+            active_source_path = asset_path
+            active_candidate = candidate
+            active_transcript = transcript
+            deadair_telemetry = None
+
+            # Pre-render micro-jump-cuts via DeadAirPruner if enabled
+            if enable_deadair_pruning and self.dead_air_pruner and transcript:
+                prune_res = self.dead_air_pruner.prune_candidate(candidate, transcript)
+                deadair_telemetry = prune_res.to_dict()
+                if prune_res.keep_intervals and (candidate.duration_seconds - prune_res.pruned_duration > 0.1):
+                    pruned_tmp_path = os.path.join(self.output_dir, f"pruned_{candidate.candidate_id}.mp4")
+                    os.makedirs(self.output_dir, exist_ok=True)
+                    v_expr, a_expr = self.dead_air_pruner.generate_select_expressions(
+                        prune_res.keep_intervals, offset_seconds=0.0
+                    )
+                    if os.path.exists(asset_path) and os.path.getsize(asset_path) > 1000:
+                        cut_cmd = [
+                            "ffmpeg", "-y", "-i", asset_path,
+                            "-filter_complex", f"[0:v]{v_expr}[v];[0:a]{a_expr}[a]",
+                            "-map", "[v]", "-map", "[a]",
+                            "-c:v", "libx264", "-preset", "ultrafast",
+                            "-c:a", "aac",
+                            pruned_tmp_path,
+                        ]
+                        try:
+                            res = subprocess.run(cut_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                            if res.returncode == 0 and os.path.exists(pruned_tmp_path) and os.path.getsize(pruned_tmp_path) > 0:
+                                active_source_path = pruned_tmp_path
+                        except Exception:
+                            pass
+
+                    candidate.start_seconds = 0.0
+                    candidate.end_seconds = prune_res.pruned_duration
+                    candidate.duration_seconds = prune_res.pruned_duration
+                    active_transcript = remap_transcript_for_keep_intervals(
+                        transcript,
+                        prune_res.keep_intervals,
+                        candidate_start=0.0,
+                    )
+
+            rendered_clip = self.renderer.render_clip(
+                source_path=active_source_path,
+                candidate=candidate,
+                profile=render_profile,
+                output_dir=self.output_dir,
+                transcript=active_transcript,
+            )
+
+            # Post-render Automated B-Roll Overlay if enabled
+            broll_telemetry = None
+            if enable_broll and self.b_roll_engine and active_transcript:
+                words = []
+                for seg in active_transcript.segments:
+                    words.extend(seg.words)
+                broll_out_path = os.path.join(
+                    self.output_dir,
+                    f"{os.path.splitext(os.path.basename(rendered_clip.file_path))[0]}_broll.mp4"
+                )
+                broll_res = self.b_roll_engine.apply_broll_overlay(
+                    video_path=rendered_clip.file_path,
+                    output_path=broll_out_path,
+                    words=words,
+                    candidate=candidate,
+                    clip_start=0.0 if enable_deadair_pruning else candidate.start_seconds,
+                    clip_end=candidate.duration_seconds if enable_deadair_pruning else candidate.end_seconds,
+                    assets_dir=broll_assets_dir,
+                )
+                broll_telemetry = broll_res.to_dict()
+                if broll_res.applied:
+                    rendered_clip.file_path = broll_res.output_video_path
+                    if broll_res.file_hash:
+                        rendered_clip.file_hash = broll_res.file_hash
+
+            job.rendered_clip = rendered_clip
+            checkpoint_payload = {
+                "clip_id": rendered_clip.clip_id,
+                "file_path": rendered_clip.file_path,
+                "sha256": rendered_clip.file_hash,
+            }
+            if deadair_telemetry:
+                checkpoint_payload["deadair_pruned"] = deadair_telemetry
+            if broll_telemetry:
+                checkpoint_payload["broll_overlay"] = broll_telemetry
+
+            self.journal.record_stage_checkpoint(
+                job,
+                JobStage.RENDERED,
+                checkpoint_payload,
+            )
+
+        # Stage 8: Post-Render Quality Assurance Verification (with checkpoint resumption)
+        qa_report = None
+        if JobStage.QA_VERIFIED.value in job.checkpoints and job.qa_report and job.qa_report.status != "FAILED":
+            qa_report = job.qa_report
+
+        if not qa_report:
+            qa_report = self.verifier.verify_clip(rendered_clip, candidate)
+            job.qa_report = qa_report
+            if qa_report.status == "FAILED":
+                err = f"QA verification failed for clip '{rendered_clip.clip_id}': {qa_report.errors}"
+                self.journal.mark_failed(job, err)
+                raise RuntimeError(err)
+
+            self.journal.record_stage_checkpoint(
+                job, JobStage.QA_VERIFIED, {"qa_status": qa_report.status, "errors": qa_report.errors, "warnings": qa_report.warnings}
+            )
+
+        # Stage 9: Autopost Handoff (with checkpoint resumption)
+        handoff_receipt = None
+        if JobStage.HANDED_OFF.value in job.checkpoints and job.handoff_receipt:
+            handoff_receipt = job.handoff_receipt
+        else:
+            handoff_receipt = self.publisher.publish_clip(
+                rendered_clip=rendered_clip,
+                candidate=candidate,
+                rights_manifest=manifest,
+                qa_report=qa_report,
+                dry_run=dry_run,
+            )
+            job.handoff_receipt = handoff_receipt
+
+        if handoff_receipt.status in ["DELIVERED", "DRY_RUN_SIMULATED", "DUPLICATE_SKIPPED"]:
+            job.current_stage = JobStage.HANDED_OFF
+            job.status = JobStatus.SUCCEEDED
+        else:
+            job.status = JobStatus.FAILED
+            job.error_message = f"Handoff returned status '{handoff_receipt.status}'."
+
+        self.journal.record_stage_checkpoint(
+            job,
+            JobStage.HANDED_OFF,
+            {"receipt_id": handoff_receipt.receipt_id, "status": handoff_receipt.status, "dry_run": dry_run},
+        )
+
+        return job
+
+    def process_video_multi(
+        self,
+        video_id: str,
+        max_clips: int = 3,
+        profile: Optional[RenderProfile] = None,
+        dry_run: bool = True,
+        auto_approve_threshold: float = 65.0,
+        min_duration: Optional[float] = None,
+        max_duration: Optional[float] = None,
+        enable_deadair_pruning: bool = False,
+        enable_broll: bool = False,
+        broll_assets_dir: Optional[str] = None,
+    ) -> List[ClipJob]:
+        """
+        Extracts, ranks, and renders up to max_clips distinct, non-overlapping
+        viral moments from a single source video.
+        """
+        render_profile = profile or RenderProfile()
+        manifest = self.rights_policy.check_rights(video_id)
+        if not self.rights_policy.verify_rights(manifest):
+            raise RightsPolicyViolationError(
+                f"Rights check failed for '{video_id}'. Status: {manifest.status.value}."
+            )
+
+        try:
+            asset_path = self.asset_provider.resolve_asset(video_id, manifest)
+        except FileNotFoundError:
+            asset_path = self.asset_provider.download_asset(video_id, manifest)
+
+        probe_info = None
+        try:
+            probe_info = self.asset_provider.probe_asset(asset_path)
+        except Exception:
+            pass
+
+        transcript = self.transcriber.load_from_cache(video_id)
+        if not transcript or not transcript.segments:
+            transcript = self.transcriber.transcribe(asset_path, video_id)
+
+        heatmap_data = None
+        try:
+            heatmap_data = self.heatmap_analyzer.extract_heatmap(
+                video_id=video_id,
+                duration_seconds=transcript.duration_seconds if transcript else 0.0,
+                transcript=transcript,
+                min_duration=min_duration or 15.0,
+                max_duration=max_duration or 60.0,
+            )
+        except Exception:
+            pass
+
+        try:
+            candidates = self.detector.detect_candidates(
+                transcript, min_duration=min_duration, max_duration=max_duration, heatmap=heatmap_data
+            )
+        except TypeError:
+            try:
+                candidates = self.detector.detect_candidates(
+                    transcript, min_duration=min_duration, max_duration=max_duration
+                )
+            except TypeError:
+                candidates = self.detector.detect_candidates(transcript)
+
+        if not candidates:
+            raise RuntimeError(f"No valid highlight moments detected for video '{video_id}' within duration bounds.")
+
+        scored_candidates = [
+            self.scorer.score_candidate(c, transcript, heatmap=heatmap_data)
+            for c in candidates
+        ]
+        scored_candidates.sort(key=lambda c: c.score, reverse=True)
+        filtered_candidates = suppress_overlapping_candidates(scored_candidates)
+        target_clips = filtered_candidates[:max(1, max_clips)]
+
+        completed_jobs: List[ClipJob] = []
+        for idx, cand in enumerate(target_clips, 1):
+            clip_job_id = f"job-{video_id}-c{idx}-{uuid.uuid4().hex[:6]}"
+            job = ClipJob(
+                job_id=clip_job_id,
+                video_id=video_id,
+                current_stage=JobStage.SCORED,
+                status=JobStatus.IN_PROGRESS,
+                rights_manifest=manifest,
+                candidate=cand,
+            )
+            self.journal.save_job(job)
+
+            if self.metadata_generator and transcript:
+                try:
+                    meta = self.metadata_generator.generate_metadata(cand, transcript)
+                    if meta.title:
+                        cand.hook_title = meta.title
+                    if meta.description:
+                        cand.suggested_description = meta.description
+                    cand.ai_metadata = meta.to_dict()
+                except Exception:
+                    pass
+
+            rendered_job = self._process_candidate_lifecycle(
+                job=job,
+                candidate=cand,
+                transcript=transcript,
+                asset_path=asset_path,
+                probe_info=probe_info,
+                manifest=manifest,
+                render_profile=render_profile,
+                auto_approve_threshold=auto_approve_threshold,
+                dry_run=dry_run,
+                enable_deadair_pruning=enable_deadair_pruning,
+                enable_broll=enable_broll,
+                broll_assets_dir=broll_assets_dir,
+            )
+            completed_jobs.append(rendered_job)
+
+        return completed_jobs
 
     def get_candidates(
         self,

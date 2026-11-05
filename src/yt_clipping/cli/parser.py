@@ -226,6 +226,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Run command
     p_run = subparsers.add_parser("run", help="Run end-to-end clipping pipeline on authorized asset")
     p_run.add_argument("--video-id", required=True, help="Video ID to process")
+    p_run.add_argument("--max-clips", type=int, default=1, help="Number of viral clips to extract and render from video (e.g. 3, 5)")
     p_run.add_argument("--min-duration", type=float, default=15.0, help="Minimum highlight clip duration in seconds (default: 15.0)")
     p_run.add_argument("--max-duration", type=float, default=60.0, help="Maximum highlight clip duration in seconds (default: 60.0)")
     p_run.add_argument("--dry-run", action=argparse.BooleanOptionalAction, default=True, help="Simulate autopost handoff (default true)")
