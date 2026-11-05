@@ -33,7 +33,6 @@ dependencies = [
     "requests>=2.31.0",
     "fastapi>=0.100.0",
     "uvicorn>=0.22.0",
-    "ultralytics>=8.0.0",
 ]
 
 [project.optional-dependencies]
