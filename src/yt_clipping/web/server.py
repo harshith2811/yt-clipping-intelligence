@@ -556,6 +556,8 @@ def api_list_clips(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
     sidecars = project_store.list_clips(project_id=project_id)
     clips = []
     for s in sidecars:
+        if not s.file_path or not os.path.exists(s.file_path):
+            continue
         fname = os.path.basename(s.file_path)
         clips.append({
             "clip_id": s.clip_id,
@@ -827,6 +829,9 @@ else:
 @app.get("/", response_class=HTMLResponse)
 def serve_dashboard():
     """Serves the live interactive studio dashboard."""
+    if os.path.exists(DASHBOARD_HTML_PATH):
+        with open(DASHBOARD_HTML_PATH, "r", encoding="utf-8") as _f:
+            return _f.read()
     return HTML_DASHBOARD
 
 

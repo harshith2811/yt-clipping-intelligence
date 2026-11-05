@@ -1804,10 +1804,22 @@ Storage Base Path:    ${data.storage.data_dir}
 
     async function loadRecentClips() {
       try {
+        const pRes = await fetch('/api/v1/projects');
+        const projs = await pRes.json();
+        if (projs && projs.length > 0) {
+          const latest = projs[0];
+          const res = await fetch(/api/v1/clips?project_id=);
+          const pClips = await res.json();
+          if (pClips && pClips.length > 0) {
+            pClips.sort((a, b) => (a.start_seconds || 0) - (b.start_seconds || 0));
+            displayRenderedClips(pClips);
+            return;
+          }
+        }
         const res = await fetch('/api/v1/clips');
         const clips = await res.json();
         if (clips && clips.length > 0) {
-          displayRenderedClips(clips.slice(0, 5));
+          displayRenderedClips(clips.slice(0, 3));
         }
       } catch (e) {
         console.error(e);

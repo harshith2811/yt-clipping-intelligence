@@ -2,6 +2,9 @@
 Unit tests for YouTube Clipping Intelligence Web Studio Dashboard & REST API.
 """
 
+import os
+import glob
+import shutil
 import pytest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
@@ -194,16 +197,23 @@ def test_api_media_range_streaming(client, tmp_path):
     project_store.save_clip_sidecar(sidecar)
 
     # 1. Full stream
-    full_res = client.get("/api/v1/clips/test_stream_id/media")
-    assert full_res.status_code == 200
-    assert full_res.headers["content-length"] == str(len(test_content))
+    try:
+        full_res = client.get("/api/v1/clips/test_stream_id/media")
+        assert full_res.status_code == 200
+        assert full_res.headers["content-length"] == str(len(test_content))
 
-    # 2. Range request: bytes=0-499
-    range_res = client.get("/api/v1/clips/test_stream_id/media", headers={"Range": "bytes=0-499"})
-    assert range_res.status_code == 206
-    assert range_res.headers["content-length"] == "500"
-    assert range_res.headers["content-range"] == f"bytes 0-499/{len(test_content)}"
-    assert range_res.content == test_content[0:500]
+        # 2. Range request: bytes=0-499
+        range_res = client.get("/api/v1/clips/test_stream_id/media", headers={"Range": "bytes=0-499"})
+        assert range_res.status_code == 206
+        assert range_res.headers["content-length"] == "500"
+        assert range_res.headers["content-range"] == f"bytes 0-499/{len(test_content)}"
+        assert range_res.content == test_content[0:500]
+    finally:
+        import shutil, glob
+        shutil.rmtree(project_store.get_project_dir("proj_test"), ignore_errors=True)
+        for f in glob.glob(os.path.join(project_store.rendered_clips_dir, "*test_stream_id*")):
+            try: os.remove(f)
+            except OSError: pass
 
 
 def test_path_traversal_protection(client):
@@ -242,15 +252,24 @@ def test_api_regenerate_caption_endpoint(client, tmp_path):
     bad_res = client.post("/api/v1/clips/nonexistent_clip_xyz/regenerate_caption")
     assert bad_res.status_code == 404
 
-    # 2. Existing clip succeeds and updates sidecar
-    res = client.post("/api/v1/clips/test_regen_clip/regenerate_caption")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["status"] == "regenerated"
-    assert "caption_package" in data
-    assert "intelligence" in data
-    assert data["caption_package"]["hook_title"] != ""
-    assert "Tech Creator" in data["caption_package"]["creator_credit"]
+    dummy_file = tmp_path / "dummy.mp4"
+    dummy_file.write_bytes(b"dummy mp4")
+    try:
+        # 2. Existing clip succeeds and updates sidecar
+        res = client.post("/api/v1/clips/test_regen_clip/regenerate_caption")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "regenerated"
+        assert "caption_package" in data
+        assert "intelligence" in data
+        assert data["caption_package"]["hook_title"] != ""
+        assert "Tech Creator" in data["caption_package"]["creator_credit"]
+    finally:
+        import shutil, glob
+        shutil.rmtree(project_store.get_project_dir("proj_regen"), ignore_errors=True)
+        for f in glob.glob(os.path.join(project_store.rendered_clips_dir, "*test_regen_clip*")):
+            try: os.remove(f)
+            except OSError: pass
 
 
 def test_api_clips_includes_playback_and_validation(client, tmp_path):
@@ -275,14 +294,21 @@ def test_api_clips_includes_playback_and_validation(client, tmp_path):
     )
     project_store.save_clip_sidecar(sidecar)
 
-    res = client.get("/api/v1/clips")
-    assert res.status_code == 200
-    clips = res.json()
-    target = next((c for c in clips if c["clip_id"] == "test_clip_playback"), None)
-    assert target is not None
-    assert target["playback_url"] == "/api/v1/clips/test_clip_playback/media"
-    assert target["download_url"] == "/api/v1/clips/test_clip_playback/download"
-    assert target["validation_status"] == "COMPLETED"
+    try:
+        res = client.get("/api/v1/clips")
+        assert res.status_code == 200
+        clips = res.json()
+        target = next((c for c in clips if c["clip_id"] == "test_clip_playback"), None)
+        assert target is not None
+        assert target["playback_url"] == "/api/v1/clips/test_clip_playback/media"
+        assert target["download_url"] == "/api/v1/clips/test_clip_playback/download"
+        assert target["validation_status"] == "COMPLETED"
+    finally:
+        import shutil, glob
+        shutil.rmtree(project_store.get_project_dir("proj_pb"), ignore_errors=True)
+        for f in glob.glob(os.path.join(project_store.rendered_clips_dir, "*test_clip_playback*")):
+            try: os.remove(f)
+            except OSError: pass
 
 
 def test_api_settings_endpoints(client):
