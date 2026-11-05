@@ -3,8 +3,8 @@ from .captions import SubtitleGenerator
 from .renderer import FFmpegRenderer, RenderingError
 from .cta_overlay import CTAOverlayEngine, CTAConfig, CTAStyle, CTATiming, CTATimingWindow
 from .outro_card import OutroCardEngine, OutroCardConfig, synthesize_bell_chime
-from .face_tracker import (
-    FaceFocusedFramer,
+from .face_tracker import FaceFocusedFramer
+from .trajectory import (
     TrajectoryConfig,
     KinematicSegment,
     TrajectoryResult,
