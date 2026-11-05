@@ -68,7 +68,7 @@ RUN python -m yt_clipping.scripts.prebake_models
 
 # Copy and configure multi-mode 24/7 entrypoint
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 
 # Create durable storage volume mount points
 RUN mkdir -p /app/data /app/data/rendered_clips /app/data/assets /app/data/transcripts /app/data/heatmaps /app/data/handoffs /app/data/temp

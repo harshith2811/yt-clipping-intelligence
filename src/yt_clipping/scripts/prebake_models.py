@@ -59,28 +59,43 @@ def ensure_yunet_model() -> str:
 def ensure_yolo_models() -> None:
     """Ensures YOLOv8 detection and instance segmentation models are present and primed."""
     os.makedirs(MODELS_DIR, exist_ok=True)
-    try:
-        from ultralytics import YOLO
-
-        for model_name in ["yolov8n.pt", "yolov8n-seg.pt"]:
-            target_path = os.path.join(MODELS_DIR, model_name)
-            logger.info(f"Checking YOLO model: {model_name}...")
-            if not os.path.exists(target_path):
-                logger.info(f"Downloading {model_name} via Ultralytics...")
+    for model_name in ["yolov8n.pt", "yolov8n-seg.pt"]:
+        target_path = os.path.join(MODELS_DIR, model_name)
+        logger.info(f"Checking YOLO model: {model_name}...")
+        if not os.path.exists(target_path) or os.path.getsize(target_path) < 100_000:
+            logger.info(f"Downloading {model_name}...")
+            downloaded = False
+            try:
+                from ultralytics import YOLO
                 model = YOLO(model_name)
-                # If downloaded to current dir, move to models dir
                 if os.path.exists(model_name) and not os.path.exists(target_path):
                     import shutil
                     shutil.move(model_name, target_path)
-            else:
-                model = YOLO(target_path)
+                if os.path.exists(target_path) and os.path.getsize(target_path) > 100_000:
+                    downloaded = True
+            except Exception as e:
+                logger.warning(f"Ultralytics download helper failed: {e}. Trying direct HTTP fallback...")
 
-            # Warmup inference
-            dummy_img = np.zeros((640, 640, 3), dtype=np.uint8)
-            _ = model(dummy_img, verbose=False)
-            logger.info(f"[OK] Ultralytics {model_name} verified ({os.path.getsize(target_path) if os.path.exists(target_path) else 'ready'})")
-    except Exception as e:
-        logger.warning(f"[WARN] YOLOv8 verification note (non-fatal if CPU only): {e}")
+            if not downloaded:
+                direct_url = f"https://github.com/ultralytics/assets/releases/download/v8.3.0/{model_name}"
+                try:
+                    req = urllib.request.Request(direct_url, headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req, timeout=30) as resp, open(target_path, "wb") as f:
+                        f.write(resp.read())
+                    logger.info(f"Directly downloaded {model_name} to {target_path} ({os.path.getsize(target_path)} bytes)")
+                except Exception as e:
+                    logger.warning(f"Failed direct download for {model_name}: {e}")
+
+        # Verification warmup if file exists
+        if os.path.exists(target_path) and os.path.getsize(target_path) > 100_000:
+            try:
+                from ultralytics import YOLO
+                model = YOLO(target_path)
+                dummy_img = np.zeros((640, 640, 3), dtype=np.uint8)
+                _ = model(dummy_img, verbose=False)
+                logger.info(f"[OK] Ultralytics {model_name} verified ({os.path.getsize(target_path)} bytes)")
+            except Exception as e:
+                logger.warning(f"[WARN] YOLOv8 warmup note: {e}")
 
 
 def ensure_whisper_models() -> None:

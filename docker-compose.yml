@@ -25,13 +25,6 @@ services:
       - DEFAULT_LAYOUT_MODE=active_speaker
       - DEFAULT_SUBTITLE_PRESET=hormozi
       - POLL_INTERVAL=${POLL_INTERVAL:-300}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu, video, compute, utility]
 
   # ==============================================================================
   # 24/7 Autonomous Discovery & Clipping Daemon (Optional Background Profile)
