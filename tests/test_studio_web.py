@@ -285,4 +285,26 @@ def test_api_clips_includes_playback_and_validation(client, tmp_path):
     assert target["validation_status"] == "COMPLETED"
 
 
+def test_api_settings_endpoints(client):
+    """Verifies GET and POST /api/v1/settings."""
+    res = client.get("/api/v1/settings")
+    assert res.status_code == 200
+    data = res.json()
+    assert "gemini_model" in data
+    assert "layout_mode" in data
+
+    # Update settings
+    post_res = client.post("/api/v1/settings", json={"contact_email": "ops@customdomain.com"})
+    assert post_res.status_code == 200
+    assert post_res.json()["settings"]["contact_email"] == "ops@customdomain.com"
+
+
+def test_api_clip_poster_endpoint(client, tmp_path):
+    """Verifies GET /api/v1/clips/{clip_id}/poster returns poster or 404."""
+    # Nonexistent
+    bad_res = client.get("/api/v1/clips/nonexistent_clip_xyz/poster")
+    assert bad_res.status_code == 404
+
+
+
 

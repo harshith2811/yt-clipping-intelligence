@@ -559,9 +559,12 @@ def api_list_clips(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
         fname = os.path.basename(s.file_path)
         clips.append({
             "clip_id": s.clip_id,
+            "project_id": s.project_id,
+            "video_id": s.video_id,
             "filename": fname,
             "url": f"/clips/{fname}",
             "playback_url": f"/api/v1/clips/{s.clip_id}/media",
+            "poster_url": f"/api/v1/clips/{s.clip_id}/poster",
             "download_url": f"/api/v1/clips/{s.clip_id}/download",
             "size_mb": round(s.file_size_bytes / (1024 * 1024), 2),
             "duration": round(s.duration_seconds, 1),
@@ -692,11 +695,67 @@ def api_stream_clip_media(clip_id: str, request: Request) -> Response:
     return stream_video_with_range(safe_path, request)
 
 
+@app.get("/api/v1/clips/{clip_id}/poster")
+def api_get_clip_poster(clip_id: str):
+    """Returns a JPEG poster thumbnail for the clip, generating it if needed."""
+    clean_id = _sanitize_clip_id(clip_id)
+    sidecar = project_store.get_clip_sidecar(clean_id)
+    file_path = sidecar.file_path if (sidecar and os.path.exists(sidecar.file_path)) else None
+    if not file_path:
+        matches = glob.glob(os.path.join(CLIPS_DIR, f"*{clean_id}*.mp4"))
+        if matches:
+            file_path = matches[0]
+
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Clip video not found.")
+
+    poster_path = os.path.splitext(file_path)[0] + ".jpg"
+    if not os.path.exists(poster_path):
+        try:
+            import subprocess
+            subprocess.run(
+                ["ffmpeg", "-y", "-ss", "00:00:01.5", "-i", file_path, "-vframes", "1", "-q:v", "2", poster_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+                timeout=5,
+            )
+        except Exception:
+            pass
+
+    if os.path.exists(poster_path):
+        return FileResponse(poster_path, media_type="image/jpeg")
+
+    if sidecar and sidecar.source_metadata and sidecar.source_metadata.get("thumbnail_url"):
+        return RedirectResponse(sidecar.source_metadata["thumbnail_url"])
+    raise HTTPException(status_code=404, detail="Poster unavailable.")
+
+
 @app.get("/api/v1/projects")
 def api_list_projects() -> List[Dict[str, Any]]:
-    """Returns persistent project history."""
+    """Returns persistent project history enriched with clip metadata."""
     projects = project_store.list_projects()
-    return [p.to_dict() for p in projects]
+    out = []
+    for p in projects:
+        data = p.to_dict()
+        clips = project_store.list_clips(project_id=p.project_id)
+        data["clips"] = [
+            {
+                "clip_id": c.clip_id,
+                "filename": os.path.basename(c.file_path),
+                "duration": round(c.duration_seconds, 1),
+                "score": round(c.score, 1),
+                "playback_url": f"/api/v1/clips/{c.clip_id}/media",
+                "poster_url": f"/api/v1/clips/{c.clip_id}/poster",
+                "download_url": f"/api/v1/clips/{c.clip_id}/download",
+                "hook_title": (c.caption_package.get("hook_title") if c.caption_package else "") or (c.candidate_data.get("hook_title") if c.candidate_data else ""),
+                "status": c.status,
+            }
+            for c in clips
+        ]
+        data["clips_count"] = len(clips)
+        out.append(data)
+    return out
 
 
 @app.get("/api/v1/projects/{project_id}")
@@ -708,809 +767,61 @@ def api_get_project(project_id: str) -> Dict[str, Any]:
     clips = project_store.list_clips(project_id=project_id)
     data = project.to_dict()
     data["clips"] = [c.to_dict() for c in clips]
+    data["clips_count"] = len(clips)
     return data
+
+
+@app.delete("/api/v1/projects/{project_id}")
+def api_delete_project(project_id: str) -> Dict[str, Any]:
+    """Deletes a project folder and its associated files."""
+    clean_id = os.path.basename(project_id.strip()).replace("/", "").replace("\\", "")
+    pdir = project_store.get_project_dir(clean_id)
+    if os.path.exists(pdir):
+        import shutil
+        shutil.rmtree(pdir, ignore_errors=True)
+        return {"status": "deleted", "project_id": clean_id}
+    raise HTTPException(status_code=404, detail="Project not found.")
+
+
+STUDIO_SETTINGS = {
+    "gemini_model": os.getenv("GEMINI_PRIMARY_MODEL", "gemini-3.5-flash-lite"),
+    "layout_mode": "active_speaker",
+    "subtitle_preset": "hormozi",
+    "gpu_acceleration": True,
+    "enable_polish": True,
+    "enable_outro": True,
+    "attribution_template": "Original video and content by: {channel_title}",
+    "fair_use_disclaimer": (
+        "This Short contains edited material from the original source for commentary, "
+        "educational discussion, or discovery. All underlying rights remain with their respective owners. "
+        "Attribution is provided for identification. Contact our team for rights-related inquiries or removal requests."
+    ),
+    "contact_email": "rights@yourdomain.com",
+}
+
+
+@app.get("/api/v1/settings")
+def api_get_settings() -> Dict[str, Any]:
+    """Returns current studio configuration."""
+    return STUDIO_SETTINGS
+
+
+@app.post("/api/v1/settings")
+def api_update_settings(updates: Dict[str, Any]) -> Dict[str, Any]:
+    """Updates studio configuration preferences."""
+    STUDIO_SETTINGS.update(updates)
+    return {"status": "saved", "settings": STUDIO_SETTINGS}
 
 
 # ------------------------------------------------------------------------------
 # Professional SaaS Web Studio Redesign
 # ------------------------------------------------------------------------------
-HTML_DASHBOARD = """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube Clipping Intelligence Platform - Live Studio</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #090d16;
-      --card-bg: #111827;
-      --card-inner: #0b1120;
-      --border: #1f293d;
-      --border-focus: #4f46e5;
-      --accent: #6366f1;
-      --accent-hover: #4f46e5;
-      --accent-light: rgba(99, 102, 241, 0.12);
-      --emerald: #10b981;
-      --emerald-light: rgba(16, 185, 129, 0.12);
-      --amber: #f59e0b;
-      --amber-light: rgba(245, 158, 11, 0.12);
-      --rose: #f43f5e;
-      --rose-light: rgba(244, 63, 94, 0.12);
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
-      --text-subtle: #64748b;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
-    body { background-color: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; overflow-x: hidden; }
-    
-    /* Header */
-    header {
-      background: rgba(17, 24, 39, 0.85);
-      backdrop-filter: blur(16px);
-      border-bottom: 1px solid var(--border);
-      padding: 0.875rem 2rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-    .brand { display: flex; align-items: center; gap: 0.85rem; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.03em; }
-    .brand-icon {
-      width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #6366f1, #10b981);
-      display: flex; align-items: center; justify-content: center; font-size: 1rem; color: #fff;
-    }
-    .badge {
-      background: var(--accent-light); color: #a5b4fc; font-size: 0.72rem; font-weight: 600;
-      padding: 0.2rem 0.6rem; border-radius: 9999px; border: 1px solid rgba(99, 102, 241, 0.3);
-    }
-    .nav-tabs { display: flex; gap: 0.5rem; background: var(--card-inner); padding: 0.25rem; border-radius: 0.5rem; border: 1px solid var(--border); }
-    .nav-btn {
-      padding: 0.45rem 1rem; border-radius: 0.375rem; border: none; font-size: 0.825rem; font-weight: 600;
-      background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s;
-    }
-    .nav-btn.active { background: var(--accent); color: #fff; }
-    .status-pill { display: flex; align-items: center; gap: 0.5rem; font-size: 0.825rem; color: var(--text-muted); }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 10px var(--emerald); }
-
-    /* Layout */
-    .container { max-width: 1560px; margin: 1.75rem auto; padding: 0 1.5rem; }
-    .grid-main { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 1.75rem; }
-    @media(max-width: 1180px) { .grid-main { grid-template-columns: 1fr; } }
-
-    .card {
-      background: var(--card-bg); border: 1px solid var(--border); border-radius: 1rem;
-      padding: 1.5rem; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.4); margin-bottom: 1.75rem;
-    }
-    .card-title {
-      font-size: 1.1rem; font-weight: 700; margin-bottom: 1.25rem; display: flex; align-items: center;
-      justify-content: space-between; letter-spacing: -0.01em;
-    }
-    .card-title span { display: flex; align-items: center; gap: 0.5rem; }
-
-    /* Form Controls */
-    label { display: block; font-size: 0.825rem; color: var(--text-muted); margin-bottom: 0.45rem; font-weight: 600; }
-    input[type="text"], select, textarea {
-      width: 100%; background: var(--card-inner); border: 1px solid var(--border); border-radius: 0.6rem;
-      padding: 0.75rem 1rem; color: #fff; font-size: 0.9rem; margin-bottom: 1.25rem; transition: border-color 0.2s;
-    }
-    input[type="text"]:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
-    textarea { font-family: 'JetBrains Mono', monospace; font-size: 0.825rem; resize: vertical; min-height: 140px; }
-
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .toggles { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem; }
-    .toggle-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.875rem; color: var(--text-muted); }
-    input[type="checkbox"] { width: 1.15rem; height: 1.15rem; accent-color: var(--accent); cursor: pointer; }
-
-    /* Action Buttons */
-    .btn-group { display: flex; gap: 0.85rem; }
-    button {
-      padding: 0.75rem 1.25rem; border-radius: 0.6rem; border: none; font-weight: 600; font-size: 0.9rem;
-      cursor: pointer; transition: all 0.2s; display: flex; justify-content: center; align-items: center; gap: 0.5rem;
-    }
-    .btn-preview { background: #1e293b; color: #f1f5f9; border: 1px solid #334155; }
-    .btn-preview:hover { background: #334155; }
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 0 20px rgba(99, 102, 241, 0.4); }
-    .btn-cancel { background: var(--rose-light); color: var(--rose); border: 1px solid var(--rose); font-size: 0.8rem; padding: 0.35rem 0.75rem; }
-    .btn-copy { background: #1e293b; color: #e2e8f0; font-size: 0.8rem; padding: 0.45rem 0.85rem; border: 1px solid var(--border); }
-    .btn-copy:hover { background: var(--accent); color: #fff; }
-
-    /* Source Video Overview Card */
-    .source-overview {
-      display: flex; gap: 1.25rem; background: var(--card-inner); border: 1px solid var(--border);
-      border-radius: 0.75rem; padding: 1rem; margin-bottom: 1.25rem; align-items: center;
-    }
-    .source-thumb { width: 150px; height: 85px; border-radius: 0.5rem; object-fit: cover; background: #000; flex-shrink: 0; }
-    .source-details { flex: 1; overflow: hidden; }
-    .source-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .source-meta { font-size: 0.775rem; color: var(--text-muted); display: flex; gap: 0.85rem; flex-wrap: wrap; }
-
-    /* Candidates List */
-    .candidate-card {
-      background: var(--card-inner); border: 1px solid var(--border); border-radius: 0.75rem;
-      padding: 1.15rem; margin-bottom: 1rem; transition: border-color 0.2s;
-    }
-    .candidate-card:hover { border-color: rgba(99, 102, 241, 0.5); }
-    .candidate-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; }
-    .score-badge {
-      background: var(--emerald-light); color: var(--emerald); font-weight: 700; font-size: 0.775rem;
-      padding: 0.25rem 0.6rem; border-radius: 9999px; border: 1px solid rgba(16, 185, 129, 0.3);
-    }
-    .candidate-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; color: #fff; }
-    .why-card {
-      background: rgba(99, 102, 241, 0.05); border-left: 3px solid var(--accent); padding: 0.65rem 0.85rem;
-      border-radius: 0 0.5rem 0.5rem 0; font-size: 0.825rem; color: #cbd5e1; margin-top: 0.6rem;
-    }
-
-    /* Metric Grid */
-    .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-top: 0.6rem; }
-    .metric-pill { background: #0f172a; padding: 0.4rem; border-radius: 0.375rem; text-align: center; border: 1px solid var(--border); }
-    .metric-val { font-size: 0.85rem; font-weight: 700; color: #a5b4fc; }
-    .metric-label { font-size: 0.68rem; color: var(--text-subtle); text-transform: uppercase; }
-
-    /* Progress Box */
-    .progress-box { margin-top: 1.25rem; background: var(--card-inner); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1.15rem; display: none; }
-    .progress-bar-bg { width: 100%; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; margin: 0.75rem 0; }
-    .progress-bar { height: 100%; width: 0%; background: var(--accent); transition: width 0.3s; }
-
-    /* Shorts Gallery */
-    .clips-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1.25rem; }
-    .clip-card { background: var(--card-inner); border: 1px solid var(--border); border-radius: 0.75rem; overflow: hidden; display: flex; flex-direction: column; }
-    .video-wrapper { position: relative; width: 100%; padding-top: 177.77%; background: #000; }
-    .video-wrapper video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
-    .clip-meta { padding: 1rem; flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 0.75rem; }
-
-    /* Caption Studio Tabs */
-    .caption-tabs { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
-    .caption-tab-btn {
-      background: var(--card-inner); color: var(--text-muted); border: 1px solid var(--border);
-      padding: 0.35rem 0.75rem; border-radius: 0.375rem; font-size: 0.775rem; font-weight: 600; cursor: pointer;
-    }
-    .caption-tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-    /* Notification Toast */
-    .toast {
-      position: fixed; bottom: 2rem; right: 2rem; background: #1e293b; border: 1px solid var(--emerald);
-      color: #fff; padding: 0.85rem 1.25rem; border-radius: 0.5rem; display: flex; align-items: center;
-      gap: 0.6rem; font-size: 0.875rem; font-weight: 600; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-      z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s;
-    }
-    .toast.show { opacity: 1; pointer-events: auto; }
-  </style>
-</head>
-<body>
-
-  <!-- Application Header -->
-  <header>
-    <div class="brand">
-      <div class="brand-icon">⚡</div>
-      <span>YouTube Clipping Studio</span>
-      <span class="badge">Phase 2 AI Engine</span>
-    </div>
-
-    <div class="nav-tabs">
-      <button class="nav-btn active" onclick="switchView('studio')">Studio Workspace</button>
-      <button class="nav-btn" onclick="switchView('projects')">Project History</button>
-      <button class="nav-btn" onclick="switchView('settings')">Settings</button>
-    </div>
-
-    <div class="status-pill" id="healthPill">
-      <div class="dot"></div>
-      <span id="healthText">Auditing Subsystems...</span>
-    </div>
-  </header>
-
-  <div class="container">
-    <!-- View 1: Studio Workspace -->
-    <div id="viewStudio" class="grid-main">
-      
-      <!-- Left Column: Input, Discovery, and Render Settings -->
-      <div>
-        <!-- Ingestion Card -->
-        <div class="card">
-          <div class="card-title">
-            <span>🎥 Ingest YouTube Video</span>
-            <span class="badge" id="providerBadge">Dual-Engine Active</span>
-          </div>
-
-          <label for="videoInput">YouTube URL, Short Link, or 11-Character Video ID</label>
-          <input type="text" id="videoInput" placeholder="https://www.youtube.com/watch?v=nEaJMdM1djM" value="https://www.youtube.com/watch?v=nEaJMdM1djM">
-
-          <!-- Source Video Overview Card (Dynamically updated) -->
-          <div class="source-overview" id="sourceOverview" style="display: none;">
-            <img class="source-thumb" id="srcThumb" src="" alt="Thumbnail">
-            <div class="source-details">
-              <div class="source-title" id="srcTitle">Loading title...</div>
-              <div class="source-meta">
-                <span id="srcChannel">Channel: --</span>
-                <span id="srcDuration">Duration: --</span>
-                <span id="srcViews">Views: --</span>
-                <span id="srcProvider" style="color:var(--emerald);">Provider: --</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="grid-2">
-            <div>
-              <label for="clipsCount">Milking Yield (Solid Shorts)</label>
-              <select id="clipsCount">
-                <option value="auto">Auto (SolidShortsDecider)</option>
-                <option value="1">1 Top Short</option>
-                <option value="3" selected>3 Solid Shorts</option>
-                <option value="5">5 High-Retention Shorts</option>
-              </select>
-            </div>
-            <div>
-              <label for="layoutMode">Camera Framing Profile</label>
-              <select id="layoutMode">
-                <option value="active_speaker" selected>Active Speaker (YuNet Gimbal)</option>
-                <option value="blur_background">Cinematic 9:16 Blurred Canvas</option>
-                <option value="split_screen">Dual Split-Screen (Podcast)</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="grid-2">
-            <div>
-              <label for="subPreset">Animated Subtitle Preset</label>
-              <select id="subPreset">
-                <option value="hormozi" selected>Hormozi (Bounce + Yellow Pop)</option>
-                <option value="beast_bounce">Beast Bounce (Rapid High Energy)</option>
-                <option value="neon_cyber">Neon Cyber (Cyan Glow)</option>
-                <option value="clean_editorial">Clean Editorial (Minimal White)</option>
-              </select>
-            </div>
-            <div>
-              <label for="hardwareAccel">Hardware Acceleration</label>
-              <select id="hardwareAccel">
-                <option value="gpu" selected>NVIDIA NVENC (High Speed)</option>
-                <option value="cpu">libx264 (CPU Fallback)</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="toggles">
-            <div class="toggle-row">
-              <span>⚡ Pacing Polish & Anti-Pop Speech Gates</span>
-              <input type="checkbox" id="enablePolish" checked>
-            </div>
-            <div class="toggle-row">
-              <span>🔔 Dedicated Animated Outro Card (2.5s with Chime)</span>
-              <input type="checkbox" id="enableOutro" checked>
-            </div>
-          </div>
-
-          <div class="btn-group">
-            <button class="btn-preview" onclick="runPreview()">🔍 Discover & Explain Moments</button>
-            <button class="btn-primary" onclick="startRender()">🚀 Render Solid Shorts</button>
-          </div>
-
-          <!-- Staged Progress Box -->
-          <div class="progress-box" id="progressBox">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span id="progressMsg" style="font-size:0.85rem; font-weight:600;">Processing...</span>
-              <div style="display:flex; align-items:center; gap:0.5rem;">
-                <span id="progressPct" style="font-size:0.85rem; font-weight:700; color:var(--accent);">0%</span>
-                <button class="btn-cancel" id="btnCancelJob" onclick="cancelCurrentJob()" style="display:none;">Cancel</button>
-              </div>
-            </div>
-            <div class="progress-bar-bg">
-              <div class="progress-bar" id="progressBar"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Discovered Candidates & Explainability Card -->
-        <div class="card" id="previewContainer" style="display: none;">
-          <div class="card-title">
-            <span>📊 Discovered Solid Shorts & Why They Work</span>
-            <span class="badge" id="yieldSummary">Yield: 0</span>
-          </div>
-          <div id="candidatesList"></div>
-        </div>
-      </div>
-
-      <!-- Right Column: Rendered Library, Video Player, and Caption Studio -->
-      <div>
-        <!-- Shorts Library Card -->
-        <div class="card">
-          <div class="card-title">
-            <span>🎬 Rendered 9:16 Shorts Library</span>
-            <button onclick="loadClips()" style="padding:0.3rem 0.8rem; font-size:0.775rem; background:#1e293b; color:#fff;">↻ Refresh</button>
-          </div>
-          <div class="clips-grid" id="clipsGrid">
-            <div style="color:var(--text-muted); font-size:0.875rem; grid-column:1/-1; text-align:center; padding:3rem 0;">
-              No rendered vertical clips on disk yet. Render one on the left!
-            </div>
-          </div>
-        </div>
-
-        <!-- Active Short Caption & Publishing Studio -->
-        <div class="card" id="captionStudioCard" style="display: none;">
-          <div class="card-title">
-            <span>✍ Caption Studio & Social Publishing</span>
-            <div style="display:flex; gap:0.5rem;">
-              <button class="btn-copy" id="btnRegenerateCaption" onclick="regenerateCaption()">✨ Regenerate</button>
-              <button class="btn-copy" onclick="copyHashtags()">🏷 Copy Tags</button>
-              <button class="btn-copy" onclick="copyFormattedCaption()">📋 Copy Caption</button>
-            </div>
-          </div>
-
-          <div class="caption-tabs">
-            <button class="caption-tab-btn active" id="tabFull" onclick="switchPlatformTab('full')">Full Package</button>
-            <button class="caption-tab-btn" id="tabYT" onclick="switchPlatformTab('youtube_shorts')">YouTube Shorts</button>
-            <button class="caption-tab-btn" id="tabIG" onclick="switchPlatformTab('instagram_reels')">Instagram Reels</button>
-            <button class="caption-tab-btn" id="tabTT" onclick="switchPlatformTab('tiktok')">TikTok</button>
-          </div>
-
-          <label for="captionEditor">Ready-to-Publish Formatted Caption (Editable)</label>
-          <textarea id="captionEditor"></textarea>
-
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.5rem;">
-            <span style="font-size:0.75rem; color:var(--text-subtle);" id="captionProviderText">Generated via: Gemini</span>
-            <button style="background:transparent; border:none; color:#a5b4fc; font-size:0.75rem; cursor:pointer;" onclick="resetCaptionToAI()">↺ Reset to AI Original</button>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- View 2: Projects History -->
-    <div id="viewProjects" style="display: none;">
-      <div class="card">
-        <div class="card-title">
-          <span>📁 Persistent Project Archive</span>
-          <button onclick="loadProjects()" style="padding:0.3rem 0.8rem; font-size:0.775rem; background:#1e293b; color:#fff;">↻ Refresh</button>
-        </div>
-        <div id="projectsList" style="display:flex; flex-direction:column; gap:1rem;">
-          <div style="color:var(--text-muted); text-align:center; padding:3rem 0;">Loading project history...</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- View 3: Settings & Diagnostics -->
-    <div id="viewSettings" style="display: none;">
-      <div class="card">
-        <div class="card-title">⚙ System Diagnostics & Architecture Status</div>
-        <div id="diagnosticsDetails" style="font-family:'JetBrains Mono', monospace; font-size:0.85rem; color:#cbd5e1; line-height:1.7;">
-          Inspecting runtime environment...
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- Notification Toast -->
-  <div class="toast" id="toast">
-    <span>✓</span>
-    <span id="toastMsg">Caption copied to clipboard!</span>
-  </div>
-
-  <script>
-    // State management
-    let currentSelectedClipData = null;
-    let currentActiveTaskId = null;
-    let pollInterval = null;
-
-    function sanitizeHTML(str) {
-      if (!str) return '';
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
-
-    function showToast(msg) {
-      const toast = document.getElementById('toast');
-      document.getElementById('toastMsg').innerText = msg;
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3000);
-    }
-
-    function switchView(viewName) {
-      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById('viewStudio').style.display = viewName === 'studio' ? 'grid' : 'none';
-      document.getElementById('viewProjects').style.display = viewName === 'projects' ? 'block' : 'none';
-      document.getElementById('viewSettings').style.display = viewName === 'settings' ? 'block' : 'none';
-
-      if (viewName === 'projects') loadProjects();
-      if (viewName === 'settings') loadSettings();
-    }
-
-    async function checkHealth() {
-      try {
-        const res = await fetch('/api/v1/health');
-        const data = await res.json();
-        const pill = document.getElementById('healthText');
-        const dev = data.gpu_available ? data.gpu_device : 'CPU Fallback';
-        pill.innerText = `Online | ${dev} | FFmpeg Ready`;
-        document.getElementById('providerBadge').innerText = data.metadata_provider === 'youtube_data_api_v3' ? 'Data API v3' : 'yt-dlp Fallback';
-      } catch (e) {
-        document.getElementById('healthText').innerText = 'Platform API Error';
-      }
-    }
-
-    async function runPreview() {
-      const url = document.getElementById('videoInput').value.trim();
-      if (!url) return alert('Please enter a YouTube video URL');
-
-      const pBox = document.getElementById('previewContainer');
-      const list = document.getElementById('candidatesList');
-      list.innerHTML = '<div style="color:var(--text-muted); padding:1rem 0;">Extracting transcript, retention heatmap, and synthesizing intelligence...</div>';
-      pBox.style.display = 'block';
-
-      try {
-        const res = await fetch('/api/v1/preview', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ video_id_or_url: url })
-        });
-        const data = await res.json();
-        if (data.detail) return alert('Preview Error: ' + data.detail);
-
-        // Display Source Overview
-        if (data.source_metadata) {
-          const m = data.source_metadata;
-          document.getElementById('srcThumb').src = m.thumbnail_url || '';
-          document.getElementById('srcTitle').innerText = m.title || 'Source Video';
-          document.getElementById('srcChannel').innerText = `Channel: ${m.channel_title || '--'}`;
-          document.getElementById('srcDuration').innerText = `Duration: ${Math.round(m.duration)}s`;
-          document.getElementById('srcViews').innerText = `Views: ${Number(m.view_count).toLocaleString()}`;
-          document.getElementById('srcProvider').innerText = `Provider: ${m.metadata_provider}`;
-          document.getElementById('sourceOverview').style.display = 'flex';
-        }
-
-        document.getElementById('yieldSummary').innerText = `${data.recommended_solid_shorts_count} Shorts Recommended`;
-
-        if (!data.solid_clips || data.solid_clips.length === 0) {
-          list.innerHTML = '<div style="color:var(--text-muted); padding:1rem 0;">No high-retention clips met the solid quality floor.</div>';
-          return;
-        }
-
-        list.innerHTML = data.solid_clips.map(c => {
-          const intel = c.intelligence || {};
-          return `
-            <div class="candidate-card">
-              <div class="candidate-header">
-                <span class="score-badge">★ ${c.score}/100 Composite Score</span>
-                <span style="font-size:0.775rem; color:var(--text-subtle); font-family:monospace;">${c.start_seconds}s - ${c.end_seconds}s (${c.duration_seconds}s)</span>
-              </div>
-              <div class="candidate-title">"${sanitizeHTML(c.hook_title)}"</div>
-              <div class="why-card">
-                <strong>Why This Short Works:</strong> ${sanitizeHTML(c.why_it_works || intel.why_it_works || c.rationale)}
-              </div>
-              <div class="metric-grid" style="grid-template-columns: repeat(5, 1fr);">
-                <div class="metric-pill">
-                  <div class="metric-val">${intel.hook_strength || 8.5}/10</div>
-                  <div class="metric-label">Hook</div>
-                </div>
-                <div class="metric-pill">
-                  <div class="metric-val">${intel.context_completeness || 8.0}/10</div>
-                  <div class="metric-label">Complete</div>
-                </div>
-                <div class="metric-pill">
-                  <div class="metric-val">${intel.information_density || 7.8}/10</div>
-                  <div class="metric-label">Density</div>
-                </div>
-                <div class="metric-pill">
-                  <div class="metric-val">${intel.ending_quality || 8.0}/10</div>
-                  <div class="metric-label">Ending</div>
-                </div>
-                <div class="metric-pill">
-                  <div class="metric-val">${intel.estimated_engagement_potential || 85}%</div>
-                  <div class="metric-label">Est. Ret.</div>
-                </div>
-              </div>
-              <div style="font-size:0.775rem; color:var(--text-subtle); margin-top:0.6rem; line-height:1.4;">
-                <span style="color:var(--text-muted); font-weight:600;">Selection Rationale:</span> ${sanitizeHTML(intel.selection_reason || c.rationale || 'Selected by SolidShortsDecider')}
-              </div>
-              ${(intel.quality_warnings || []).map(w => `<div style="font-size:0.75rem; color:var(--amber); margin-top:0.35rem;">⚠️ ${sanitizeHTML(w)}</div>`).join('')}
-            </div>
-          `;
-        }).join('');
-
-      } catch (e) {
-        list.innerHTML = `<div style="color:var(--rose); padding:1rem 0;">Preview extraction failed: ${e.message}</div>`;
-      }
-    }
-
-    async function startRender() {
-      const url = document.getElementById('videoInput').value.trim();
-      if (!url) return alert('Please enter a YouTube video URL');
-
-      const countVal = document.getElementById('clipsCount').value;
-      const maxClips = countVal === 'auto' ? 3 : parseInt(countVal, 10);
-      const layout = document.getElementById('layoutMode').value;
-      const subPreset = document.getElementById('subPreset').value;
-      const gpu = document.getElementById('hardwareAccel').value === 'gpu';
-      const enablePolish = document.getElementById('enablePolish').checked;
-      const enableOutro = document.getElementById('enableOutro').checked;
-
-      const pBox = document.getElementById('progressBox');
-      const pBar = document.getElementById('progressBar');
-      const pMsg = document.getElementById('progressMsg');
-      const pPct = document.getElementById('progressPct');
-      const btnCancel = document.getElementById('btnCancelJob');
-
-      pBox.style.display = 'block';
-      pBar.style.width = '5%';
-      pBar.style.background = 'var(--accent)';
-      pMsg.innerText = 'Initializing background rendering job...';
-      pPct.innerText = '5%';
-      btnCancel.style.display = 'inline-block';
-
-      try {
-        const res = await fetch('/api/v1/render', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            video_id_or_url: url,
-            max_clips: maxClips,
-            layout: layout,
-            subtitle_preset: subPreset,
-            enable_polish: enablePolish,
-            enable_outro: enableOutro,
-            gpu: gpu
-          })
-        });
-        const data = await res.json();
-        if (data.detail) return alert('Render Error: ' + data.detail);
-
-        currentActiveTaskId = data.job_id || data.task_id;
-        pollStatus(currentActiveTaskId);
-      } catch (e) {
-        alert('Failed to trigger render: ' + e.message);
-      }
-    }
-
-    function pollStatus(taskId) {
-      if (pollInterval) clearInterval(pollInterval);
-      const pBar = document.getElementById('progressBar');
-      const pMsg = document.getElementById('progressMsg');
-      const pPct = document.getElementById('progressPct');
-      const btnCancel = document.getElementById('btnCancelJob');
-
-      pollInterval = setInterval(async () => {
-        try {
-          const res = await fetch(`/api/v1/jobs/${taskId}`);
-          const data = await res.json();
-          pBar.style.width = `${data.progress}%`;
-          pPct.innerText = `${data.progress}%`;
-          pMsg.innerText = `[${data.current_stage || data.status}] ${data.message || ''}`;
-
-          if (data.status === 'completed' || data.status === 'COMPLETED') {
-            clearInterval(pollInterval);
-            pBar.style.background = 'var(--emerald)';
-            pMsg.innerText = 'Render Complete! Finished Shorts loaded below.';
-            btnCancel.style.display = 'none';
-            loadClips();
-          } else if (data.status === 'failed' || data.status === 'FAILED') {
-            clearInterval(pollInterval);
-            pBar.style.background = 'var(--rose)';
-            pMsg.innerText = 'Render Failed: ' + (data.error || 'Unknown error');
-            btnCancel.style.display = 'none';
-          } else if (data.status === 'cancelled' || data.status === 'CANCELLED') {
-            clearInterval(pollInterval);
-            pBar.style.background = 'var(--amber)';
-            pMsg.innerText = 'Job was cancelled.';
-            btnCancel.style.display = 'none';
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      }, 2500);
-    }
-
-    async function cancelCurrentJob() {
-      if (!currentActiveTaskId) return;
-      try {
-        await fetch(`/api/v1/jobs/${currentActiveTaskId}/cancel`, { method: 'POST' });
-        showToast('Cancellation signaled.');
-      } catch (e) {
-        alert('Failed to cancel job: ' + e.message);
-      }
-    }
-
-    let currentPlatformTab = 'full';
-
-    async function loadClips() {
-      try {
-        const res = await fetch('/api/v1/clips');
-        const clips = await res.json();
-        const grid = document.getElementById('clipsGrid');
-        if (!clips || clips.length === 0) {
-          grid.innerHTML = '<div style="color:var(--text-muted); font-size:0.875rem; grid-column:1/-1; text-align:center; padding:3rem 0;">No rendered vertical clips found on disk yet.</div>';
-          return;
-        }
-
-        window.loadedClipsMap = {};
-        clips.forEach(c => { window.loadedClipsMap[c.clip_id] = c; });
-
-        grid.innerHTML = clips.map(c => `
-          <div class="clip-card">
-            <div class="video-wrapper">
-              <video src="${c.playback_url || c.url}" controls preload="metadata"></video>
-            </div>
-            <div class="clip-meta">
-              <div>
-                <span class="score-badge">★ ${c.score}/100</span>
-                <div style="font-size:0.9rem; font-weight:700; margin-top:0.4rem;">${sanitizeHTML(c.filename)}</div>
-                <div style="font-size:0.75rem; color:var(--text-subtle);">${c.duration}s | ${c.size_mb} MB | QA: ${c.validation_status || c.status}</div>
-              </div>
-              <div style="display:flex; gap:0.5rem;">
-                <a href="${c.download_url || c.url}" download="${c.filename}" class="btn-copy" style="flex:1; text-align:center; text-decoration:none;">⬇ Download</a>
-                <button class="btn-copy" onclick="selectClipById('${c.clip_id}')">✍ Caption</button>
-              </div>
-            </div>
-          </div>
-        `).join('');
-
-        if (clips.length > 0 && !currentSelectedClipData) {
-          selectClipForCaption(clips[0]);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    function selectClipById(clipId) {
-      if (window.loadedClipsMap && window.loadedClipsMap[clipId]) {
-        selectClipForCaption(window.loadedClipsMap[clipId]);
-      }
-    }
-
-    function selectClipForCaption(clip) {
-      currentSelectedClipData = clip;
-      const studioCard = document.getElementById('captionStudioCard');
-      studioCard.style.display = 'block';
-
-      const pkg = clip.caption_package || {};
-      document.getElementById('captionProviderText').innerText = `Generated via: ${pkg.generation_provider || 'Deterministic Offline'}`;
-      switchPlatformTab(currentPlatformTab || 'full');
-    }
-
-    function switchPlatformTab(platform) {
-      currentPlatformTab = platform;
-      document.getElementById('tabFull').classList.toggle('active', platform === 'full');
-      document.getElementById('tabYT').classList.toggle('active', platform === 'youtube_shorts');
-      document.getElementById('tabIG').classList.toggle('active', platform === 'instagram_reels');
-      document.getElementById('tabTT').classList.toggle('active', platform === 'tiktok');
-
-      if (!currentSelectedClipData || !currentSelectedClipData.caption_package) return;
-      const pkg = currentSelectedClipData.caption_package;
-      const vars = pkg.platform_variants || {};
-
-      if (platform === 'full') {
-        document.getElementById('captionEditor').value = pkg.full_copy_caption || '';
-      } else if (vars[platform]) {
-        document.getElementById('captionEditor').value = vars[platform];
-      }
-    }
-
-    async function regenerateCaption() {
-      if (!currentSelectedClipData || !currentSelectedClipData.clip_id) {
-        return alert('Please select a rendered clip first.');
-      }
-      const btn = document.getElementById('btnRegenerateCaption');
-      if (btn) btn.innerText = '⏳ Synthesizing...';
-      try {
-        const res = await fetch(`/api/v1/clips/${currentSelectedClipData.clip_id}/regenerate_caption`, {
-          method: 'POST'
-        });
-        if (!res.ok) throw new Error('Regeneration endpoint returned error');
-        const data = await res.json();
-        currentSelectedClipData.caption_package = data.caption_package;
-        currentSelectedClipData.intelligence = data.intelligence;
-        if (window.loadedClipsMap && window.loadedClipsMap[currentSelectedClipData.clip_id]) {
-          window.loadedClipsMap[currentSelectedClipData.clip_id] = currentSelectedClipData;
-        }
-        selectClipForCaption(currentSelectedClipData);
-        showToast('New caption & hooks synthesized!');
-      } catch (e) {
-        alert('Failed to regenerate caption: ' + e.message);
-      } finally {
-        if (btn) btn.innerText = '✨ Regenerate';
-      }
-    }
-
-    function copyFormattedCaption() {
-      const text = document.getElementById('captionEditor').value;
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => showToast('Caption copied to clipboard!'));
-      } else {
-        // Fallback
-        const ta = document.getElementById('captionEditor');
-        ta.select();
-        document.execCommand('copy');
-        showToast('Caption copied to clipboard!');
-      }
-    }
-
-    function copyHashtags() {
-      if (!currentSelectedClipData || !currentSelectedClipData.caption_package) return;
-      const tags = (currentSelectedClipData.caption_package.targeted_hashtags || []).join(' ');
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(tags).then(() => showToast('Hashtags copied!'));
-      }
-    }
-
-    function resetCaptionToAI() {
-      if (!currentSelectedClipData || !currentSelectedClipData.caption_package) return;
-      const pkg = currentSelectedClipData.caption_package;
-      if (currentPlatformTab === 'full') {
-        document.getElementById('captionEditor').value = pkg.full_copy_caption || '';
-      } else {
-        const vars = pkg.platform_variants || {};
-        document.getElementById('captionEditor').value = vars[currentPlatformTab] || pkg.full_copy_caption || '';
-      }
-      showToast('Caption reset to AI original.');
-    }
-
-    async function loadProjects() {
-      const list = document.getElementById('projectsList');
-      try {
-        const res = await fetch('/api/v1/projects');
-        const projs = await res.json();
-        if (!projs || projs.length === 0) {
-          list.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:3rem 0;">No saved projects found. Process a video in Studio!</div>';
-          return;
-        }
-
-        list.innerHTML = projs.map(p => `
-          <div style="background:var(--card-inner); border:1px solid var(--border); border-radius:0.75rem; padding:1.25rem; display:flex; justify-content:space-between; align-items:center;">
-            <div>
-              <div style="font-weight:700; font-size:1rem; margin-bottom:0.25rem;">${sanitizeHTML(p.title)}</div>
-              <div style="font-size:0.8rem; color:var(--text-muted);">Video ID: ${p.video_id} | Created: ${p.created_at.slice(0, 10)} | Clips: ${p.clips_count}</div>
-            </div>
-            <button class="btn-copy" onclick="resumeProject('${p.video_id}')">Open in Studio</button>
-          </div>
-        `).join('');
-      } catch (e) {
-        list.innerHTML = '<div style="color:var(--rose);">Failed to load project history.</div>';
-      }
-    }
-
-    function resumeProject(videoId) {
-      document.getElementById('videoInput').value = `https://www.youtube.com/watch?v=${videoId}`;
-      switchView('studio');
-      runPreview();
-    }
-
-    async function loadSettings() {
-      const box = document.getElementById('diagnosticsDetails');
-      try {
-        const res = await fetch('/api/v1/health');
-        const data = await res.json();
-        box.innerHTML = `
-Backend Status:        ${data.status}
-Timestamp:             ${data.timestamp}
-Hardware GPU:          ${data.gpu_device} (Available: ${data.gpu_available})
-FFmpeg Path:           ${data.ffmpeg_path || 'Not found'}
-Metadata Engine:       ${data.metadata_provider}
-Gemini Model Active:   ${data.models.gemini_model}
-Total Rendered Clips:  ${data.storage.clips_count}
-Total Saved Projects:  ${data.storage.projects_count}
-Storage Base Path:     ${data.storage.data_dir}
-        `;
-      } catch (e) {
-        box.innerText = 'Failed to load telemetry diagnostics.';
-      }
-    }
-
-    // Initialize on boot
-    checkHealth();
-    loadClips();
-  </script>
-</body>
-</html>
-"""
+DASHBOARD_HTML_PATH = os.path.join(os.path.dirname(__file__), "dashboard.html")
+if os.path.exists(DASHBOARD_HTML_PATH):
+    with open(DASHBOARD_HTML_PATH, "r", encoding="utf-8") as _f:
+        HTML_DASHBOARD = _f.read()
+else:
+    HTML_DASHBOARD = "<!DOCTYPE html><html><body><h1>Studio Loading...</h1></body></html>"
 
 
 @app.get("/", response_class=HTMLResponse)

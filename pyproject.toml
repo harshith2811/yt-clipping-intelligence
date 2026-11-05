@@ -49,6 +49,9 @@ pinger-daemon = "yt_clipping.discovery.pinger_daemon:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+yt_clipping = ["web/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
