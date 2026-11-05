@@ -11,6 +11,7 @@ jobs:
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -28,8 +29,8 @@ jobs:
 
       - name: Install FFmpeg & System Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg libgl1 espeak libespeak-dev
+          sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout="30"
+          sudo apt-get install -y -o Acquire::Retries=3 -o Acquire::http::Timeout="30" ffmpeg libgl1 espeak libespeak-dev
 
       - name: Install Python Dependencies
         run: |
