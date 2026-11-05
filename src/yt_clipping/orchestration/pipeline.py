@@ -748,9 +748,18 @@ class ClippingPipeline:
             self.scorer.score_candidate(c, transcript, heatmap=heatmap_data)
             for c in candidates
         ]
-        scored_candidates.sort(key=lambda c: c.score, reverse=True)
-        filtered_candidates = suppress_overlapping_candidates(scored_candidates)
-        target_clips = filtered_candidates[:max(1, max_clips)]
+        from ..detection.solid_shorts import SolidShortsDecider
+        decider = SolidShortsDecider()
+        decision = decider.decide(
+            candidates=scored_candidates,
+            duration_seconds=transcript.duration_seconds if transcript else 0.0,
+            heatmap_data=heatmap_data,
+            target_count=max_clips,
+            strict_quality=True,
+        )
+        target_clips = decision.selected_candidates
+        if not target_clips and scored_candidates:
+            target_clips = [scored_candidates[0]]
 
         completed_jobs: List[ClipJob] = []
         for idx, cand in enumerate(target_clips, 1):

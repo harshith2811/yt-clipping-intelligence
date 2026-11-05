@@ -17,6 +17,11 @@ from .short_viability import (
     ShortViabilityValidator,
     ViabilityCheckResult,
 )
+from .solid_shorts import (
+    SolidShortsDecider,
+    SolidShortsConfig,
+    SolidShortsDecision,
+)
 from .arc_detector import ArcDetector
 from .sentence_classifier import (
     SentenceClassifier,
@@ -45,6 +50,9 @@ __all__ = [
     "PruneResult",
     "ShortViabilityValidator",
     "ViabilityCheckResult",
+    "SolidShortsDecider",
+    "SolidShortsConfig",
+    "SolidShortsDecision",
     "ArcDetector",
     "SentenceClassifier",
     "ClassifiedSentence",

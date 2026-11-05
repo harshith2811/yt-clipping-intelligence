@@ -374,7 +374,7 @@ class MCPServer:
             content = f"Error executing tool '{tool_name}': {str(e)}"
             is_error = True
 
-        text_output = content if isinstance(content, str) else json.dumps(content, indent=2, ensure_ascii=False)
+        text_output = content if isinstance(content, str) else json.dumps(content, indent=2, ensure_ascii=False, default=str)
         return {
             "jsonrpc": "2.0",
             "id": req_id,
@@ -555,7 +555,7 @@ class MCPServer:
                         "hook_title": c.hook_title,
                         "suggested_description": c.suggested_description,
                         "transcript_text": c.transcript_text,
-                        "breakdown": getattr(c, "breakdown", {}),
+                        "breakdown": c.breakdown.to_dict() if hasattr(getattr(c, "breakdown", None), "to_dict") else getattr(c, "breakdown", {}),
                     }
                     for c in candidates
                 ]
