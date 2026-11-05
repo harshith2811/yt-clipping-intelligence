@@ -18,4 +18,13 @@ __all__ = [
     "PackagingLinter",
     "LintIssue",
     "PackagingLintReport",
+    "CaptionSynthesizer",
+    "ShortCaptionPackage",
+    "ClipIntelligence",
 ]
+
+from .caption_synthesizer import (
+    CaptionSynthesizer,
+    ShortCaptionPackage,
+    ClipIntelligence,
+)

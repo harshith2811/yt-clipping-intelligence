@@ -182,7 +182,7 @@ class MediaQualityVerifier(QualityVerifier):
             cmd = [
                 "ffprobe",
                 "-v", "error",
-                "-show_entries", "format=duration,size:stream=codec_type,width,height",
+                "-show_entries", "format=duration,size:stream=codec_type,width,height,r_frame_rate",
                 "-of", "json",
                 path,
             ]
@@ -198,6 +198,18 @@ class MediaQualityVerifier(QualityVerifier):
                 w = int(v_stream.get("width", 0))
                 h = int(v_stream.get("height", 0))
 
+                fps = 30.0
+                r_fps = v_stream.get("r_frame_rate", "")
+                if r_fps and "/" in r_fps:
+                    num, den = r_fps.split("/")
+                    if float(den) > 0:
+                        fps = round(float(num) / float(den), 2)
+                elif r_fps:
+                    try:
+                        fps = float(r_fps)
+                    except ValueError:
+                        pass
+
                 if has_video and dur > 0.0:
                     return {
                         "readable": True,
@@ -206,6 +218,7 @@ class MediaQualityVerifier(QualityVerifier):
                         "duration": dur,
                         "width": w,
                         "height": h,
+                        "fps": fps,
                         "probe_engine": "ffprobe",
                     }
         except Exception:
@@ -220,12 +233,14 @@ class MediaQualityVerifier(QualityVerifier):
             has_video = "Video:" in stderr
             has_audio = "Audio:" in stderr
             dim_match = re.search(r"Video:.*,\s*(\d{2,5})x(\d{2,5})", stderr)
+            fps_match = re.search(r"(\d+(?:\.\d+)?)\s*fps", stderr)
 
             if dur_match and has_video:
                 hh, mm, ss = dur_match.groups()
                 dur = int(hh) * 3600 + int(mm) * 60 + float(ss)
                 w = int(dim_match.group(1)) if dim_match else 1080
                 h = int(dim_match.group(2)) if dim_match else 1920
+                fps = float(fps_match.group(1)) if fps_match else 30.0
                 return {
                     "readable": True,
                     "has_video": has_video,
@@ -233,6 +248,7 @@ class MediaQualityVerifier(QualityVerifier):
                     "duration": dur,
                     "width": w,
                     "height": h,
+                    "fps": fps,
                     "probe_engine": "ffmpeg_cli",
                 }
         except Exception:
@@ -259,6 +275,7 @@ class MediaQualityVerifier(QualityVerifier):
                         "duration": dur,
                         "width": w,
                         "height": h,
+                        "fps": round(fps, 2),
                         "probe_engine": "opencv",
                     }
         except Exception:
@@ -310,3 +327,127 @@ class MediaQualityVerifier(QualityVerifier):
             "readable": False,
             "error": "Failed to decode media headers or frames with ffprobe, ffmpeg, or OpenCV.",
         }
+
+
+def validate_rendered_short(
+    file_path: str,
+    expected_duration: Optional[float] = None,
+    duration_tolerance: float = 2.0,
+    strict: bool = False,
+) -> Dict[str, Any]:
+    """
+    Automated Video Quality Assurance service for rendered vertical Shorts.
+    Verifies container readability, streams, 9:16 aspect ratio, duration tolerance,
+    framerate, file integrity, and decodability.
+    """
+    errors: List[str] = []
+    warnings: List[str] = []
+
+    if not os.path.exists(file_path):
+        return {
+            "valid": False,
+            "status": "FAILED",
+            "errors": [f"File does not exist: {file_path}"],
+            "warnings": [],
+            "checks": {
+                "exists": False,
+                "nonzero_size": False,
+                "readable": False,
+                "video_stream": False,
+                "audio_stream": False,
+                "aspect_ratio_9_16": False,
+                "duration_ok": False,
+                "valid_framerate": False,
+                "decodable": False,
+            },
+            "duration": 0.0,
+            "resolution": "0x0",
+            "fps": 0.0,
+            "file_size_bytes": 0,
+            "sha256": "",
+            "validated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    size = os.path.getsize(file_path)
+    if size < 1024:
+        errors.append(f"File size {size} bytes is suspiciously small (< 1KB).")
+
+    # SHA-256
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        while chunk := f.read(65536):
+            sha256.update(chunk)
+    file_hash = sha256.hexdigest()
+
+    verifier = MediaQualityVerifier(strict=strict)
+    probe = verifier._probe_media(file_path)
+
+    readable = probe.get("readable", False)
+    has_video = probe.get("has_video", False)
+    has_audio = probe.get("has_audio", False)
+    dur = float(probe.get("duration") or 0.0)
+    w = int(probe.get("width") or 0)
+    h = int(probe.get("height") or 0)
+
+    if not readable:
+        errors.append(f"Media container cannot be decoded: {probe.get('error', 'Unknown decode failure')}")
+    if not has_video:
+        errors.append("Missing video stream in container.")
+    if not has_audio:
+        warnings.append("Missing audio stream; Short will be silent.")
+
+    # Aspect ratio check
+    ratio = (w / h) if h > 0 else 0.0
+    aspect_ok = abs(ratio - (9.0 / 16.0)) < 0.06
+    if not aspect_ok:
+        warnings.append(f"Non-standard vertical aspect ratio {w}x{h} (ratio: {ratio:.3f}, expected 0.5625).")
+
+    # Duration check
+    dur_ok = True
+    if expected_duration is not None and dur > 0:
+        delta = abs(dur - expected_duration)
+        if delta > duration_tolerance:
+            if delta > 3.5:
+                errors.append(f"Duration mismatch: Expected {expected_duration:.1f}s, measured {dur:.1f}s.")
+                dur_ok = False
+            else:
+                warnings.append(f"Duration slight variance: Expected {expected_duration:.1f}s, measured {dur:.1f}s.")
+
+    # Framerate check (default assumed 30.0 if probe does not return)
+    fps = float(probe.get("fps") or 30.0)
+    fps_ok = 15.0 <= fps <= 120.0
+    if not fps_ok:
+        warnings.append(f"Unusual frame rate: {fps:.1f} fps.")
+
+    # Status determination
+    if errors:
+        status = "FAILED"
+    elif warnings:
+        status = "WARNING"
+    else:
+        status = "PASSED"
+
+    return {
+        "valid": len(errors) == 0,
+        "status": status,
+        "errors": errors,
+        "warnings": warnings,
+        "checks": {
+            "exists": True,
+            "nonzero_size": size >= 1024,
+            "readable": readable,
+            "video_stream": has_video,
+            "audio_stream": has_audio,
+            "aspect_ratio_9_16": aspect_ok,
+            "duration_ok": dur_ok,
+            "valid_framerate": fps_ok,
+            "decodable": readable and has_video,
+        },
+        "duration": round(dur, 2),
+        "resolution": f"{w}x{h}",
+        "fps": fps,
+        "file_size_bytes": size,
+        "sha256": file_hash,
+        "validated_at": datetime.now(timezone.utc).isoformat(),
+    }
+

@@ -142,3 +142,25 @@ def test_qa_verifier_fails_empty_file(tmp_path):
     report = verifier.verify_clip(clip, cand)
     assert report.status == "FAILED"
     assert any("below threshold" in e for e in report.errors)
+
+
+def test_validate_rendered_short_missing_and_valid(tmp_path):
+    from src.yt_clipping.qa.verifier import validate_rendered_short
+
+    # Missing file check
+    res_missing = validate_rendered_short(str(tmp_path / "does_not_exist.mp4"))
+    assert res_missing["valid"] is False
+    assert res_missing["status"] == "FAILED"
+    assert res_missing["checks"]["exists"] is False
+
+    # Valid dummy file check
+    valid_mp4 = str(tmp_path / "dummy_valid.mp4")
+    with open(valid_mp4, "wb") as f:
+        f.write(b'\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2mp41' + (b'\x00' * 5000))
+
+    res_valid = validate_rendered_short(valid_mp4, strict=False)
+    assert res_valid["checks"]["exists"] is True
+    assert res_valid["checks"]["nonzero_size"] is True
+    assert res_valid["file_size_bytes"] > 1024
+    assert res_valid["sha256"] != ""
+

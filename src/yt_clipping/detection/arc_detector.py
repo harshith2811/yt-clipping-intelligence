@@ -126,6 +126,14 @@ class ArcDetector:
         raw_candidates: List[HighlightCandidate] = []
         n = len(classified_sentences)
 
+        # Performance optimization: precompute sentence word counts, cumulative word counts,
+        # and standalone payoff scores once per transcript (O(N) instead of O(N*K)).
+        word_counts = [len(s.text.split()) for s in classified_sentences]
+        cum_words = [0]
+        for wc in word_counts:
+            cum_words.append(cum_words[-1] + wc)
+        payoff_cache = [self._score_payoff_resolution(s) for s in classified_sentences]
+
         for i in range(n):
             start_sent = classified_sentences[i]
 
@@ -154,7 +162,7 @@ class ArcDetector:
                 has_clear_structure = (
                     start_sent.confidence >= 0.90
                     and start_sent.sentence_type in (HOOK, REVELATION, CONTEXT)
-                    and len(start_sent.text.split()) >= 6
+                    and word_counts[i] >= 6
                     and start_sent.text.strip().endswith((".", "!", "?"))
                 )
                 if not has_pause_boundary and not has_clear_structure:
@@ -163,7 +171,7 @@ class ArcDetector:
                 has_clear_structure = (
                     start_sent.confidence >= 0.90
                     and start_sent.sentence_type in (HOOK, REVELATION, CONTEXT)
-                    and len(start_sent.text.split()) >= 6
+                    and word_counts[i] >= 6
                     and start_sent.text.strip().endswith((".", "!", "?"))
                 )
                 if not has_pause_boundary and not has_clear_structure:
@@ -173,6 +181,9 @@ class ArcDetector:
             # Skip pure FILLER or SPONSOR starts.
             if start_sent.sentence_type in (FILLER, SPONSOR):
                 continue
+
+            # Precompute hook score once for this start sentence
+            hook_score = self._score_hook_strength(start_sent, has_pause_boundary=has_pause_boundary)
 
             # Scan forward to discover matching payoffs within duration window
             arc_sentences: List[ClassifiedSentence] = [start_sent]
@@ -201,6 +212,7 @@ class ArcDetector:
                     has_weak_ending = any(w in end_lower[-30:] for w in WEAK_ENDINGS)
 
                     if ends_sentence and not has_weak_ending:
+                        cand_num_words = cum_words[j + 1] - cum_words[i]
                         cand = self._evaluate_and_build_candidate(
                             start_sent=start_sent,
                             end_sent=end_sent,
@@ -211,6 +223,9 @@ class ArcDetector:
                             motion_analyzer=eff_motion_analyzer,
                             cadence_scorer=cadence_scorer,
                             has_pause_boundary=has_pause_boundary,
+                            precomputed_hook_score=hook_score,
+                            precomputed_payoff_score=payoff_cache[j],
+                            precomputed_num_words=cand_num_words,
                         )
                         if cand and cand.validate_bounds(transcript.duration_seconds or end_sent.end):
                             hook_candidates.append(cand)
@@ -240,6 +255,9 @@ class ArcDetector:
         motion_analyzer: Optional[Any] = None,
         cadence_scorer: Optional[AdaptiveCadenceScorer] = None,
         has_pause_boundary: bool = False,
+        precomputed_hook_score: Optional[float] = None,
+        precomputed_payoff_score: Optional[float] = None,
+        precomputed_num_words: Optional[int] = None,
     ) -> Optional[HighlightCandidate]:
         """Evaluates candidate arc across multi-signal dimensions and constructs candidate."""
         w_start = start_sent.start
@@ -254,16 +272,27 @@ class ArcDetector:
         last_sentence_text = end_sent.text.strip()
 
         # 1. Hook Strength Score (0.0 - 10.0)
-        hook_score = self._score_hook_strength(start_sent, has_pause_boundary=has_pause_boundary)
+        if precomputed_hook_score is not None:
+            hook_score = precomputed_hook_score
+        else:
+            hook_score = self._score_hook_strength(start_sent, has_pause_boundary=has_pause_boundary)
 
         # 2. Payoff Resolution Score (0.0 - 10.0)
-        payoff_score = self._score_payoff_resolution(end_sent, full_text)
+        if precomputed_payoff_score is not None:
+            payoff_score = precomputed_payoff_score
+        else:
+            payoff_score = self._score_payoff_resolution(end_sent, full_text)
 
         # 3. Arc Completeness Score (0.0 - 10.0)
         arc_score = self._score_arc_completeness(arc_sentences)
 
         # 4. Speech Dynamics & Pacing (0.0 - 10.0)
-        pacing_score = self._score_speech_dynamics(arc_sentences, w_dur, cadence_scorer=cadence_scorer)
+        pacing_score = self._score_speech_dynamics(
+            arc_sentences,
+            w_dur,
+            cadence_scorer=cadence_scorer,
+            num_words=precomputed_num_words,
+        )
 
         # 5. Acoustic Energy Score (0.0 - 10.0)
         if audio_analyzer is not None:
@@ -387,7 +416,7 @@ class ArcDetector:
 
         return max(1.0, min(10.0, score))
 
-    def _score_payoff_resolution(self, sent: ClassifiedSentence, full_text: str) -> float:
+    def _score_payoff_resolution(self, sent: ClassifiedSentence, full_text: str = "") -> float:
         """Evaluates closing payoff and conclusion power (0.0 to 10.0)."""
         score = 4.0
         text = sent.text.strip()
@@ -432,11 +461,13 @@ class ArcDetector:
     def _score_arc_completeness(self, sentences: List[ClassifiedSentence]) -> float:
         """Evaluates narrative structure: setup -> escalation -> payoff (0.0 to 10.0)."""
         score = 6.0
-        full_text = " ".join(s.text for s in sentences).strip()
-        if full_text and full_text[0].isupper():
-            score += 1.0
-        if full_text and full_text.endswith((".", "!", "?")):
-            score += 1.0
+        if sentences:
+            first_text = sentences[0].text.strip()
+            last_text = sentences[-1].text.strip()
+            if first_text and first_text[0].isupper():
+                score += 1.0
+            if last_text and last_text.endswith((".", "!", "?")):
+                score += 1.0
 
         types = [s.sentence_type for s in sentences]
 
@@ -467,6 +498,7 @@ class ArcDetector:
         sentences: List[ClassifiedSentence],
         total_dur: float,
         cadence_scorer: Optional[AdaptiveCadenceScorer] = None,
+        num_words: Optional[int] = None,
     ) -> float:
         """Evaluates pacing, tempo variance, and dramatic pauses (0.0 to 10.0)."""
         all_words: List[WordTimestamp] = []
@@ -492,7 +524,8 @@ class ArcDetector:
 
             return max(1.0, min(10.0, base_score))
 
-        num_words = sum(len(s.text.split()) for s in sentences)
+        if num_words is None:
+            num_words = sum(len(s.text.split()) for s in sentences)
         avg_wpm = (num_words / max(total_dur, 1.0)) * 60.0
 
         # Baseline WPM cadence scoring fallback

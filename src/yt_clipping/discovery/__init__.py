@@ -46,4 +46,9 @@ __all__ = [
     "TrendScorer",
     "ViralityClassification",
     "VelocityTelemetry",
+    "VideoMetadataService",
+    "EnrichedVideoInfo",
+    "normalize_youtube_url",
 ]
+
+from .video_metadata import VideoMetadataService, EnrichedVideoInfo, normalize_youtube_url
