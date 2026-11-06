@@ -307,6 +307,71 @@
       background: var(--bg-panel-hover);
     }
 
+    /* Loading Spinners & Animation */
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .spinner-blue {
+      border-color: rgba(59, 130, 246, 0.25);
+      border-top-color: var(--blue);
+    }
+    .spinner-accent {
+      border-color: rgba(79, 70, 229, 0.25);
+      border-top-color: var(--accent);
+    }
+    .eta-pill {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      background: var(--bg-inner);
+      padding: 0.25rem 0.65rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .stage-stepper {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.4rem;
+    }
+    .stage-step {
+      font-size: 0.725rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 12px;
+      background: var(--bg-inner);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: all 0.2s ease;
+    }
+    .stage-step.active {
+      border-color: var(--blue);
+      color: var(--blue);
+      background: var(--blue-light);
+      font-weight: 700;
+    }
+    .stage-step.done {
+      border-color: rgba(16,185,129,0.3);
+      color: var(--emerald);
+      background: var(--emerald-light);
+    }
+
     /* Buttons */
     .btn {
       padding: 0.6rem 1.1rem;
@@ -1018,7 +1083,7 @@
         <div class="input-row">
           <div class="url-input-wrap">
             <svg class="svg-icon" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-            <input type="text" id="videoInput" class="text-input" placeholder="Paste YouTube URL or ID (e.g. https://www.youtube.com/watch?v=nEaJMdM1djM)" value="https://www.youtube.com/watch?v=nEaJMdM1djM">
+            <input type="text" id="videoInput" class="text-input" placeholder="Paste YouTube URL or ID (e.g. https://www.youtube.com/watch?v=nEaJMdM1djM) and press Enter" value="https://www.youtube.com/watch?v=nEaJMdM1djM" onkeydown="if(event.key === 'Enter') { event.preventDefault(); runPreview(); }">
           </div>
           <button class="btn btn-secondary" onclick="pasteFromClipboard()">
             <svg class="svg-icon" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
@@ -1080,25 +1145,47 @@
 
         <!-- Action Row -->
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end; align-items: center; border-top: 1px solid var(--border); padding-top: 0.85rem;">
-          <button class="btn btn-preview" onclick="runPreview()">
+          <button class="btn btn-preview" id="btnPreviewAction" onclick="runPreview()">
             <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <span>Discover & Explain Moments</span>
+            <span id="btnPreviewText">Discover & Explain Moments</span>
           </button>
-          <button class="btn btn-primary" onclick="startRender()">
+          <button class="btn btn-primary" id="btnRenderAction" onclick="startRender()">
             <svg class="svg-icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-            <span>Render Solid Shorts</span>
+            <span id="btnRenderText">Render Solid Shorts</span>
           </button>
         </div>
       </div>
 
-      <!-- Live Render Progress Banner (Hidden by default) -->
+      <!-- Analysis Progress Card (Live when Enter / Discover is pressed) -->
+      <div class="progress-card" id="analysisProgressCard" style="display: none; border-color: var(--accent);">
+        <div class="progress-header">
+          <div class="progress-stage" style="color: var(--accent);">
+            <span class="spinner spinner-accent"></span>
+            <span id="analysisStageLabel">Analyzing video intelligence...</span>
+          </div>
+          <div class="eta-pill" id="analysisTimerText">
+            <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+            <span id="analysisTimerLabel">Elapsed: 00:01 • Est: ~5-8s</span>
+          </div>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="analysisProgressBar" style="background: linear-gradient(90deg, var(--accent), var(--blue)); width: 15%;"></div>
+        </div>
+        <div class="progress-msg" id="analysisProgressMsg">Fetching YouTube Data API v3 metadata & transcript...</div>
+      </div>
+
+      <!-- Live Render Progress Banner (Live when Render is pressed) -->
       <div class="progress-card" id="renderProgressCard" style="display: none;">
         <div class="progress-header">
           <div class="progress-stage" id="renderStageText">
-            <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
-            <span>[rendering] Initializing pipeline...</span>
+            <span class="spinner spinner-blue"></span>
+            <span id="renderStageTitle">[rendering] Initializing pipeline...</span>
           </div>
-          <div style="display: flex; align-items: center; gap: 1rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div class="eta-pill" id="renderTimerPill">
+              <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+              <span id="renderTimerText">Elapsed: 00:00 • Est: ~45s remaining</span>
+            </div>
             <span class="progress-pct" id="renderProgressPct">0%</span>
             <button class="btn btn-sm btn-danger" id="btnCancelJob" onclick="cancelActiveJob()">Cancel</button>
           </div>
@@ -1107,6 +1194,14 @@
           <div class="progress-bar-fill" id="renderProgressBar"></div>
         </div>
         <div class="progress-msg" id="renderProgressMsg">Preparing video extraction and face tracking...</div>
+
+        <!-- 4-Stage Visual Stepper -->
+        <div class="stage-stepper">
+          <div class="stage-step" id="stepIngestion"><span>1. Metadata & Ingestion</span></div>
+          <div class="stage-step" id="stepTracking"><span>2. Kinematic Face Tracking (NVENC)</span></div>
+          <div class="stage-step" id="stepSubtitles"><span>3. Hormozi Subtitles & Polish</span></div>
+          <div class="stage-step" id="stepCaptions"><span>4. Gemini AI Captions & QA</span></div>
+        </div>
       </div>
 
       <!-- Source Video Insight Card (Hidden until analyzed) -->
@@ -1497,15 +1592,46 @@ Storage Base Path:    ${data.storage.data_dir}
       }
     }
 
+    let analysisTimerInterval = null;
+
     async function runPreview() {
+      const btnPreview = document.getElementById('btnPreviewAction');
+      if (btnPreview && btnPreview.disabled) return;
       const url = document.getElementById('videoInput').value.trim();
       if (!url) return alert('Please enter a YouTube video URL');
+      const btnPreviewText = document.getElementById('btnPreviewText');
+      const aCard = document.getElementById('analysisProgressCard');
+      const aBar = document.getElementById('analysisProgressBar');
+      const aMsg = document.getElementById('analysisProgressMsg');
+      const aTimer = document.getElementById('analysisTimerLabel');
+      const aStage = document.getElementById('analysisStageLabel');
 
-      const card = document.getElementById('sourceVideoCard');
-      card.style.display = 'flex';
-      document.getElementById('sourceVideoTitle').innerText = 'Analyzing video metadata & transcript...';
-      document.getElementById('sourceVideoChannel').innerText = 'Querying YouTube Data API v3...';
-      document.getElementById('candidatesList').innerHTML = '<div style="color:var(--text-muted); font-size:0.85rem; padding:1.5rem 0;">Analyzing moments with SolidShortsDecider...</div>';
+      // Enable Analysis Loading Banner
+      aCard.style.display = 'flex';
+      btnPreview.disabled = true;
+      btnPreview.style.opacity = '0.7';
+      btnPreviewText.innerHTML = '<span class="spinner" style="margin-right:0.4rem;"></span>Analyzing (~5-8s)...';
+
+      const tStart = Date.now();
+      let simPct = 15;
+      aBar.style.width = '15%';
+      aStage.innerText = 'Step 1/2: Ingesting video metadata & captions...';
+      aMsg.innerText = 'Querying YouTube Data API v3 (or yt-dlp fallback)...';
+
+      if (analysisTimerInterval) clearInterval(analysisTimerInterval);
+      analysisTimerInterval = setInterval(() => {
+        const sec = Math.floor((Date.now() - tStart) / 1000);
+        const rem = Math.max(0, 6 - sec);
+        aTimer.innerText = `Elapsed: 00:${sec < 10 ? '0' : ''}${sec} • Est: ~${rem}s remaining`;
+        if (simPct < 85) {
+          simPct += 12;
+          aBar.style.width = `${simPct}%`;
+          if (simPct > 45) {
+            aStage.innerText = 'Step 2/2: Scoring narrative coherence & viral hooks...';
+            aMsg.innerText = 'Evaluating opening hooks, speech energy, and arc completeness with SolidShortsDecider...';
+          }
+        }
+      }, 700);
 
       try {
         const res = await fetch('/api/v1/preview', {
@@ -1516,39 +1642,69 @@ Storage Base Path:    ${data.storage.data_dir}
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Failed to analyze video');
 
+        // Complete analysis animation
+        clearInterval(analysisTimerInterval);
+        aBar.style.width = '100%';
+        aBar.style.background = 'var(--emerald)';
+        aStage.innerText = 'Analysis Complete!';
+        aMsg.innerText = `Discovered ${(data.candidates || []).length} coherent clipping opportunities.`;
+
         activeVideoData = data;
         const meta = data.metadata || {};
-        document.getElementById('sourceVideoThumb').src = meta.thumbnail_url || '';
-        document.getElementById('sourceVideoTitle').innerText = meta.title || 'YouTube Video';
-        document.getElementById('sourceVideoChannel').innerText = meta.channel_title || 'Creator';
-        document.getElementById('sourceVideoViews').innerText = Number(meta.view_count || 0).toLocaleString() + ' views';
-        const mins = Math.floor((meta.duration || 0) / 60);
-        const secs = Math.floor((meta.duration || 0) % 60);
-        document.getElementById('sourceVideoDuration').innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-        document.getElementById('sourceVideoDate').innerText = (meta.published_at || '').slice(0, 10);
-        document.getElementById('sourceCandidatesCount').innerText = `${(data.candidates || []).length} High-Potential Shorts Moments Discovered`;
 
-        // Render Candidates
-        const cList = document.getElementById('candidatesList');
-        cList.innerHTML = (data.candidates || []).map((c, i) => `
-          <div class="candidate-card">
-            <div class="cand-header">
-              <span class="cand-badge">#${i + 1} Highlight</span>
-              <span class="cand-score">★ ${Math.round(c.score)}/100</span>
+        // Smooth reveal of source overview card
+        setTimeout(() => {
+          aCard.style.display = 'none';
+          btnPreview.disabled = false;
+          btnPreview.style.opacity = '1';
+          btnPreviewText.innerText = 'Discover & Explain Moments';
+
+          const card = document.getElementById('sourceVideoCard');
+          card.style.display = 'flex';
+          document.getElementById('sourceVideoThumb').src = meta.thumbnail_url || '';
+          document.getElementById('sourceVideoTitle').innerText = meta.title || 'YouTube Video';
+          document.getElementById('sourceVideoChannel').innerText = meta.channel_title || 'Creator';
+          document.getElementById('sourceVideoViews').innerText = Number(meta.view_count || 0).toLocaleString() + ' views';
+          const mins = Math.floor((meta.duration || 0) / 60);
+          const secs = Math.floor((meta.duration || 0) % 60);
+          document.getElementById('sourceVideoDuration').innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+          document.getElementById('sourceVideoDate').innerText = (meta.published_at || '').slice(0, 10);
+          document.getElementById('sourceCandidatesCount').innerText = `${(data.candidates || []).length} High-Potential Shorts Moments Discovered`;
+
+          // Render Candidates
+          const cList = document.getElementById('candidatesList');
+          cList.innerHTML = (data.candidates || []).map((c, i) => `
+            <div class="candidate-card">
+              <div class="cand-header">
+                <span class="cand-badge">#${i + 1} Highlight</span>
+                <span class="cand-score">★ ${Math.round(c.score)}/100</span>
+              </div>
+              <div class="cand-title">${sanitizeHTML(c.hook_title || 'Engaging Segment')}</div>
+              <div class="cand-time">${c.start_time || '0:00'} - ${c.end_time || '0:00'} (${Math.round(c.duration || 0)}s)</div>
+              <div style="font-size:0.775rem; color:var(--text-muted); line-height:1.4;">${sanitizeHTML(c.suggested_description || '')}</div>
             </div>
-            <div class="cand-title">${sanitizeHTML(c.hook_title || 'Engaging Segment')}</div>
-            <div class="cand-time">${c.start_time || '0:00'} - ${c.end_time || '0:00'} (${Math.round(c.duration || 0)}s)</div>
-            <div style="font-size:0.775rem; color:var(--text-muted); line-height:1.4;">${sanitizeHTML(c.suggested_description || '')}</div>
-          </div>
-        `).join('');
+          `).join('');
 
-        showToast('Video analyzed successfully');
+          card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          showToast('Video analyzed in ' + Math.round((Date.now() - tStart)/1000) + 's');
+        }, 500);
+
       } catch (e) {
-        alert(e.message);
+        clearInterval(analysisTimerInterval);
+        aCard.style.display = 'none';
+        btnPreview.disabled = false;
+        btnPreview.style.opacity = '1';
+        btnPreviewText.innerText = 'Discover & Explain Moments';
+        alert('Analysis Error: ' + e.message);
       }
     }
 
+    let renderTimerInterval = null;
+    let renderStartTime = 0;
+
     async function startRender() {
+      const btnRender = document.getElementById('btnRenderAction');
+      if (btnRender && btnRender.disabled) return;
       const url = document.getElementById('videoInput').value.trim();
       if (!url) return alert('Please enter a YouTube video URL');
 
@@ -1562,16 +1718,39 @@ Storage Base Path:    ${data.storage.data_dir}
       const pBar = document.getElementById('renderProgressBar');
       const pMsg = document.getElementById('renderProgressMsg');
       const pPct = document.getElementById('renderProgressPct');
-      const pStage = document.getElementById('renderStageText');
+      const pStage = document.getElementById('renderStageTitle');
       const btnCancel = document.getElementById('btnCancelJob');
+      const btnRenderText = document.getElementById('btnRenderText');
 
       pCard.style.display = 'flex';
       pBar.style.width = '5%';
       pBar.style.background = 'var(--blue)';
       pPct.innerText = '5%';
-      pStage.innerHTML = '<svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg><span>[queued] Initializing render job...</span>';
-      pMsg.innerText = 'Dispatching background job...';
+      pStage.innerText = '[queued] Initializing pipeline job...';
+      pMsg.innerText = 'Dispatching background NVENC worker...';
       btnCancel.style.display = 'inline-flex';
+
+      btnRender.disabled = true;
+      btnRender.style.opacity = '0.7';
+      btnRenderText.innerHTML = '<span class="spinner" style="margin-right:0.4rem;"></span>Rendering...';
+
+      // Reset stage stepper
+      ['stepIngestion', 'stepTracking', 'stepSubtitles', 'stepCaptions'].forEach(s => {
+        document.getElementById(s).className = 'stage-step';
+      });
+      document.getElementById('stepIngestion').className = 'stage-step active';
+
+      renderStartTime = Date.now();
+      if (renderTimerInterval) clearInterval(renderTimerInterval);
+      renderTimerInterval = setInterval(() => {
+        const sec = Math.floor((Date.now() - renderStartTime) / 1000);
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        const elapsed = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+        const estTotal = 45; // ~45s average on GPU
+        const rem = Math.max(0, estTotal - sec);
+        document.getElementById('renderTimerText').innerText = `Elapsed: ${elapsed} • Est: ~${estTotal}s total (~${rem}s remaining)`;
+      }, 1000);
 
       try {
         const res = await fetch('/api/v1/render', {
@@ -1593,8 +1772,12 @@ Storage Base Path:    ${data.storage.data_dir}
         currentActiveTaskId = data.job_id || data.task_id;
         pollStatus(currentActiveTaskId);
       } catch (e) {
+        clearInterval(renderTimerInterval);
         alert(e.message);
         pCard.style.display = 'none';
+        btnRender.disabled = false;
+        btnRender.style.opacity = '1';
+        btnRenderText.innerText = 'Render Solid Shorts';
       }
     }
 
@@ -1603,8 +1786,10 @@ Storage Base Path:    ${data.storage.data_dir}
       const pBar = document.getElementById('renderProgressBar');
       const pMsg = document.getElementById('renderProgressMsg');
       const pPct = document.getElementById('renderProgressPct');
-      const pStage = document.getElementById('renderStageText');
+      const pStage = document.getElementById('renderStageTitle');
       const btnCancel = document.getElementById('btnCancelJob');
+      const btnRender = document.getElementById('btnRenderAction');
+      const btnRenderText = document.getElementById('btnRenderText');
 
       pollInterval = setInterval(async () => {
         try {
@@ -1612,17 +1797,43 @@ Storage Base Path:    ${data.storage.data_dir}
           const data = await res.json();
           pBar.style.width = `${data.progress}%`;
           pPct.innerText = `${data.progress}%`;
-          pStage.innerHTML = `<svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg><span>[${data.current_stage || data.status}]</span>`;
+          pStage.innerText = `[${data.current_stage || data.status}]`;
           pMsg.innerText = data.message || 'Processing video pipeline...';
+
+          // Update Stepper
+          const stage = (data.current_stage || '').toLowerCase();
+          const p = data.progress || 0;
+          if (p >= 15) {
+            document.getElementById('stepIngestion').className = 'stage-step done';
+            document.getElementById('stepTracking').className = 'stage-step active';
+          }
+          if (p >= 60) {
+            document.getElementById('stepTracking').className = 'stage-step done';
+            document.getElementById('stepSubtitles').className = 'stage-step active';
+          }
+          if (p >= 80) {
+            document.getElementById('stepSubtitles').className = 'stage-step done';
+            document.getElementById('stepCaptions').className = 'stage-step active';
+          }
 
           if (data.status === 'completed' || data.status === 'COMPLETED') {
             clearInterval(pollInterval);
+            clearInterval(renderTimerInterval);
             pBar.style.background = 'var(--emerald)';
-            pMsg.innerText = 'Render Complete! Finished Shorts loaded below.';
+            pMsg.innerText = 'Render Complete! All Shorts validated and loaded below.';
             btnCancel.style.display = 'none';
-            showToast('All Shorts rendered successfully!');
 
-            // If job included clips directly, load them immediately
+            ['stepIngestion', 'stepTracking', 'stepSubtitles', 'stepCaptions'].forEach(s => {
+              document.getElementById(s).className = 'stage-step done';
+            });
+
+            btnRender.disabled = false;
+            btnRender.style.opacity = '1';
+            btnRenderText.innerText = 'Render Solid Shorts';
+
+            const elapsedSec = Math.round((Date.now() - renderStartTime) / 1000);
+            showToast(`Shorts rendered in ${elapsedSec}s!`);
+
             if (data.clips && data.clips.length > 0) {
               displayRenderedClips(data.clips);
             } else {
@@ -1631,19 +1842,27 @@ Storage Base Path:    ${data.storage.data_dir}
             loadProjects();
           } else if (data.status === 'failed' || data.status === 'FAILED') {
             clearInterval(pollInterval);
+            clearInterval(renderTimerInterval);
             pBar.style.background = 'var(--rose)';
             pMsg.innerText = 'Render Failed: ' + (data.error || 'Pipeline error');
             btnCancel.style.display = 'none';
+            btnRender.disabled = false;
+            btnRender.style.opacity = '1';
+            btnRenderText.innerText = 'Render Solid Shorts';
           } else if (data.status === 'cancelled' || data.status === 'CANCELLED') {
             clearInterval(pollInterval);
+            clearInterval(renderTimerInterval);
             pBar.style.background = 'var(--amber)';
             pMsg.innerText = 'Job was cancelled by operator.';
             btnCancel.style.display = 'none';
+            btnRender.disabled = false;
+            btnRender.style.opacity = '1';
+            btnRenderText.innerText = 'Render Solid Shorts';
           }
         } catch (e) {
           console.error(e);
         }
-      }, 1500);
+      }, 1200);
     }
 
     async function cancelActiveJob() {
@@ -1808,7 +2027,7 @@ Storage Base Path:    ${data.storage.data_dir}
         const projs = await pRes.json();
         if (projs && projs.length > 0) {
           const latest = projs[0];
-          const res = await fetch(/api/v1/clips?project_id=);
+          const res = await fetch(`/api/v1/clips?project_id=${latest.project_id}`);
           const pClips = await res.json();
           if (pClips && pClips.length > 0) {
             pClips.sort((a, b) => (a.start_seconds || 0) - (b.start_seconds || 0));
