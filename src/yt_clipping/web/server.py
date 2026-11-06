@@ -846,6 +846,80 @@ def serve_dashboard():
     return HTML_DASHBOARD
 
 
+@app.get("/robots.txt", response_class=Response)
+def serve_robots():
+    """Serves search engine crawler instructions."""
+    content = "User-agent: *\nAllow: /\nSitemap: http://localhost:8000/sitemap.xml\n"
+    return Response(content=content, media_type="text/plain")
+
+
+@app.get("/sitemap.xml", response_class=Response)
+def serve_sitemap():
+    """Serves XML sitemap for SEO discovery."""
+    content = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>http://localhost:8000/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>"""
+    return Response(content=content, media_type="application/xml")
+
+
+@app.get("/favicon.svg", response_class=Response)
+@app.get("/favicon.ico", response_class=Response)
+def serve_favicon():
+    """Serves crisp SVG studio favicon."""
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <rect width="32" height="32" rx="8" fill="#08090d"/>
+  <rect x="1" y="1" width="30" height="30" rx="7" stroke="#2563eb" stroke-width="1.5"/>
+  <polygon points="12,8 24,16 12,24" fill="#3b82f6"/>
+</svg>"""
+    return Response(content=svg, media_type="image/svg+xml")
+
+
+@app.get("/og-image.svg", response_class=Response)
+def serve_og_image():
+    """Serves OpenGraph preview poster image (1200x630)."""
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#08090d"/>
+  <rect x="40" y="40" width="1120" height="550" rx="16" stroke="#1c202d" stroke-width="2"/>
+  <text x="100" y="240" fill="#f1f5f9" font-family="system-ui, sans-serif" font-size="64" font-weight="800">YouTube Clipping Studio</text>
+  <text x="100" y="320" fill="#8492a6" font-family="system-ui, sans-serif" font-size="28">Autonomous Long-to-Shorts Intelligence &amp; 9:16 Video Synthesis</text>
+  <rect x="100" y="380" width="220" height="52" rx="8" fill="#2563eb"/>
+  <text x="140" y="415" fill="#ffffff" font-family="system-ui, sans-serif" font-size="20" font-weight="700">Open Studio</text>
+</svg>"""
+    return Response(content=svg, media_type="image/svg+xml")
+
+
+@app.exception_handler(404)
+async def custom_404_handler(request: Request, exc: Exception):
+    """Provides a designed HTML 404 response with navigation back to studio."""
+    detail = getattr(exc, "detail", "Route not found")
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(status_code=404, content={"detail": detail})
+    html_404 = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>404 - Studio Resource Not Found</title>
+  <style>
+    body { background: #08090d; color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    h1 { font-size: 2.5rem; margin-bottom: 0.5rem; letter-spacing: -0.025em; font-weight: 800; }
+    p { color: #8492a6; margin-bottom: 1.5rem; font-size: 1rem; }
+    a { background: #2563eb; color: #fff; text-decoration: none; padding: 0.65rem 1.25rem; border-radius: 6px; font-weight: 600; font-size: 0.875rem; }
+  </style>
+</head>
+<body>
+  <h1>404 - Page Not Found</h1>
+  <p>The requested studio clip or page route does not exist.</p>
+  <a href="/">Return to Studio Workspace</a>
+</body>
+</html>"""
+    return HTMLResponse(content=html_404, status_code=404)
+
+
 def start_server(host: str = "0.0.0.0", port: int = 8000) -> None:
     """Entry point to launch the studio server via uvicorn."""
     import uvicorn
