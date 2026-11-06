@@ -27,10 +27,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      - name: Install FFmpeg & System Dependencies
+      - name: Install System Dependencies
         run: |
-          sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout="30"
-          sudo apt-get install -y -o Acquire::Retries=3 -o Acquire::http::Timeout="30" ffmpeg libgl1 espeak libespeak-dev
+          which ffmpeg || (sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout="30" && sudo apt-get install -y --no-install-recommends ffmpeg)
+          sudo apt-get install -y --no-install-recommends espeak libgl1 || true
 
       - name: Install Python Dependencies
         run: |
