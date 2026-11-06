@@ -561,6 +561,50 @@ def api_cancel_job(job_id: str) -> Dict[str, Any]:
     return {"job_id": job_id, "status": "cancelled", "message": "Job cancellation signaled successfully."}
 
 
+@app.get("/api/v1/jobs/{job_id}/stream")
+async def api_stream_job_events(job_id: str):
+    """Server-Sent Events (SSE) endpoint providing sub-second streaming telemetry of job progress."""
+    async def event_generator():
+        last_progress = -1
+        last_status = ""
+        last_stage = ""
+        stale_count = 0
+
+        while stale_count < 180:  # Timeout after ~90 seconds of inactivity
+            job = job_manager.get_job(job_id)
+            if not job and job_id in active_render_jobs:
+                data = active_render_jobs[job_id]
+            elif job:
+                data = job.to_dict()
+            else:
+                data = None
+
+            if not data:
+                yield f"event: error\ndata: {json.dumps({'error': 'Job ID not found'})}\n\n"
+                break
+
+            current_prog = data.get("progress", 0)
+            current_stat = data.get("status", "")
+            current_stg = data.get("current_stage", "")
+
+            # Send event whenever progress, status, or stage changes, or keepalive every 1.5s
+            if current_prog != last_progress or current_stat != last_status or current_stg != last_stage or stale_count % 3 == 0:
+                last_progress = current_prog
+                last_status = current_stat
+                last_stage = current_stg
+                yield f"data: {json.dumps(data)}\n\n"
+
+            if current_stat in ("completed", "COMPLETED", "failed", "FAILED", "cancelled", "CANCELLED"):
+                # Final flush
+                yield f"event: end\ndata: {json.dumps(data)}\n\n"
+                break
+
+            await asyncio.sleep(0.5)
+            stale_count += 1
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @app.get("/api/v1/clips")
 def api_list_clips(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Returns all rendered vertical clips stored on disk with sidecar metadata and playback endpoints."""

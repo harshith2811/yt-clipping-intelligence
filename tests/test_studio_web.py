@@ -164,6 +164,33 @@ def test_api_jobs_and_cancellation(client):
         assert cancel_res.json()["status"] == "cancelled"
 
 
+def test_api_job_sse_stream(client):
+    """Verifies Server-Sent Events (SSE) streaming endpoint."""
+    # Non-existent job
+    err_res = client.get("/api/v1/jobs/missing-job/stream")
+    assert err_res.status_code == 200
+    assert "event: error" in err_res.text
+
+    # Existing completed/cancelled job
+    render_req = {
+        "video_id_or_url": "nEaJMdM1djM",
+        "max_clips": 1,
+        "layout": "active_speaker",
+        "subtitle_preset": "hormozi",
+        "gpu": False,
+    }
+    with patch("yt_clipping.web.server._run_render_worker"):
+        res = client.post("/api/v1/render", json=render_req)
+        job_id = res.json()["job_id"]
+        # Cancel so it ends stream promptly
+        client.post(f"/api/v1/jobs/{job_id}/cancel")
+
+        stream_res = client.get(f"/api/v1/jobs/{job_id}/stream")
+        assert stream_res.status_code == 200
+        assert "data:" in stream_res.text
+        assert "event: end" in stream_res.text
+
+
 def test_api_projects_endpoints(client):
     """Verifies GET /api/v1/projects endpoint."""
     res = client.get("/api/v1/projects")

@@ -325,6 +325,369 @@
       background: var(--bg-panel-hover);
     }
 
+    /* Interactive Waveform & Scrubbing Engine */
+    .waveform-container {
+      margin-top: 0.85rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+    .waveform-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.725rem;
+    }
+    .waveform-legend {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+    }
+    .legend-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      color: var(--text-secondary);
+      font-size: 0.7rem;
+    }
+    .legend-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+    .legend-chip.hook .legend-dot { background: var(--blue); }
+    .legend-chip.narrative .legend-dot { background: var(--text-muted); }
+    .legend-chip.loop .legend-dot { background: var(--emerald); }
+    .waveform-meta {
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      font-size: 0.725rem;
+    }
+    .waveform-track-wrap {
+      position: relative;
+      width: 100%;
+      height: 38px;
+      background: var(--bg-inner);
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      overflow: hidden;
+      user-select: none;
+    }
+    .waveform-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .waveform-playhead {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #fff;
+      box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+      pointer-events: none;
+      transition: left 0.05s linear;
+      z-index: 4;
+    }
+    .waveform-hover-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: rgba(255, 255, 255, 0.4);
+      pointer-events: none;
+      z-index: 3;
+    }
+    .waveform-tooltip {
+      position: absolute;
+      bottom: 42px;
+      transform: translateX(-50%);
+      background: #000;
+      border: 1px solid var(--border);
+      padding: 0.2rem 0.45rem;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: #fff;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 5;
+    }
+
+    /* Command Palette & Micro-Haptic Audio Controls */
+    .cmd-trigger-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 0.35rem 0.65rem;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: border-color var(--transition-fast), color var(--transition-fast);
+    }
+    .cmd-trigger-btn:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+    .kbd-badge {
+      font-family: var(--font-mono);
+      font-size: 0.675rem;
+      background: var(--bg-inner);
+      border: 1px solid var(--border);
+      padding: 0.1rem 0.3rem;
+      border-radius: 3px;
+      color: var(--text-muted);
+    }
+    .sound-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      padding: 0.35rem 0.6rem;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: border-color var(--transition-fast), color var(--transition-fast);
+    }
+    .sound-toggle-btn:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+    .sound-toggle-btn.active {
+      color: var(--blue);
+      border-color: rgba(37, 99, 235, 0.4);
+      background: rgba(37, 99, 235, 0.08);
+    }
+
+    /* Command Palette Modal Overlay */
+    .cmd-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(6px);
+      z-index: 9999;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 15vh;
+      animation: cmdFadeIn 0.15s ease-out;
+    }
+    @keyframes cmdFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .cmd-dialog {
+      width: 100%;
+      max-width: 540px;
+      background: #0d0f15;
+      border: 1px solid #232838;
+      border-radius: 12px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85);
+      overflow: hidden;
+    }
+    .cmd-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.85rem 1.1rem;
+      border-bottom: 1px solid #1a1e2b;
+    }
+    .cmd-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-size: 0.95rem;
+      outline: none;
+      font-family: inherit;
+    }
+    .cmd-input::placeholder {
+      color: var(--text-muted);
+    }
+    .cmd-kbd {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      background: #151822;
+      border: 1px solid #282f42;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      color: var(--text-muted);
+    }
+    .cmd-list {
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 0.4rem 0.5rem;
+    }
+    .cmd-item {
+      display: flex;
+      width: 100%;
+      border: none;
+      background: transparent;
+      text-align: left;
+      font-family: inherit;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.65rem 0.85rem;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 0.825rem;
+      transition: background 0.1s, color 0.1s;
+    }
+    .cmd-item:hover, .cmd-item.selected {
+      background: #191e2c;
+      color: #fff;
+    }
+    .cmd-item-label {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+    .cmd-item-shortcut {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+    .cmd-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.6rem 1.1rem;
+      background: #090a0f;
+      border-top: 1px solid #1a1e2b;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+    .cmd-footer kbd {
+      background: #151822;
+      border: 1px solid #282f42;
+      padding: 0.1rem 0.3rem;
+      border-radius: 3px;
+      color: var(--text-secondary);
+    }
+
+    /* Enhanced 3D Phone Mockup with Notch & Glare */
+    .phone-mockup {
+      position: relative;
+      width: 100%;
+      max-width: 310px;
+      aspect-ratio: 9/16;
+      border-radius: 34px;
+      background: #000;
+      border: 2px solid #232838;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto;
+      transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+    }
+    .phone-mockup:hover {
+      transform: translateY(-2px);
+      border-color: #353d54;
+      box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+    .phone-notch {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90px;
+      height: 18px;
+      background: #090a0f;
+      border-radius: 10px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      pointer-events: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+    }
+    .phone-lens {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #151824;
+      border: 1px solid #282f42;
+    }
+    .phone-speaker {
+      width: 38px;
+      height: 3px;
+      border-radius: 2px;
+      background: #202534;
+    }
+    .phone-glare {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 40%;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 65%);
+      pointer-events: none;
+      z-index: 6;
+      border-radius: 34px 34px 0 0;
+    }
+    .phone-mockup video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      background: #000;
+    }
+
+    /* Fixed Studio Hotkeys Footer Bar */
+    .studio-footer {
+      border-top: 1px solid var(--border);
+      background: rgba(10, 11, 14, 0.95);
+      backdrop-filter: blur(12px);
+      padding: 0.6rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.725rem;
+      color: var(--text-muted);
+      margin-top: 2rem;
+    }
+    .footer-shortcuts {
+      display: flex;
+      gap: 1.1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .footer-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .footer-chip kbd {
+      background: var(--bg-inner);
+      border: 1px solid var(--border);
+      padding: 0.15rem 0.35rem;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+    }
+    .footer-engine {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      font-size: 0.725rem;
+    }
+
     /* Loading Spinners & Animation */
     @keyframes spin {
       0% { transform: rotate(0deg); }
@@ -1069,9 +1432,22 @@
       </button>
     </div>
 
-    <div class="telemetry-pill" id="telemetryPill">
-      <span class="telemetry-dot"></span>
-      <span id="telemetryText">Online • NVIDIA GeForce GTX 1650 • Gemini 3.5 Flash</span>
+    <div style="display: flex; align-items: center; gap: 0.6rem;">
+      <button class="cmd-trigger-btn" onclick="openCommandPalette()" aria-label="Open Command Center (Ctrl+K)" title="Command Center (Ctrl+K)">
+        <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <span>Commands</span>
+        <kbd class="kbd-badge">Ctrl K</kbd>
+      </button>
+
+      <button class="sound-toggle-btn active" id="soundToggleBtn" onclick="SoundFX.toggle()" aria-label="Toggle haptic audio feedback" title="Haptic Audio Feedback">
+        <svg class="svg-icon" id="soundIcon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+        <span id="soundLabel">Sound</span>
+      </button>
+
+      <div class="telemetry-pill" id="telemetryPill">
+        <span class="telemetry-dot"></span>
+        <span id="telemetryText">Online • NVIDIA GeForce GTX 1650 • Gemini 3.5 Flash</span>
+      </div>
     </div>
   </header>
 
@@ -1261,13 +1637,37 @@
         <!-- Split Workspace: Player on Left, Intelligence & Captions on Right -->
         <div class="studio-split">
 
-          <!-- Left: 9:16 Video Player Column -->
+          <!-- Left: 9:16 Video Player Column with Tactile Notch & Waveform -->
           <div class="player-column">
-            <div class="phone-mockup">
+            <div class="phone-mockup" id="phoneContainer">
+              <div class="phone-notch">
+                <div class="phone-lens"></div>
+                <div class="phone-speaker"></div>
+              </div>
+              <div class="phone-glare"></div>
               <video id="activeVideoPlayer" controls preload="metadata" playsinline></video>
             </div>
+
+            <!-- Interactive Retention & Audio Waveform Scrubber -->
+            <div class="waveform-container" id="waveformContainer">
+              <div class="waveform-header">
+                <div class="waveform-legend">
+                  <span class="legend-chip hook"><span class="legend-dot"></span>0:00-0:03 Hook Gate</span>
+                  <span class="legend-chip narrative"><span class="legend-dot"></span>Narrative Arc</span>
+                  <span class="legend-chip loop"><span class="legend-dot"></span>Loop Transition</span>
+                </div>
+                <div class="waveform-meta" id="waveformTime">0:00 / 0:00</div>
+              </div>
+              <div class="waveform-track-wrap" id="waveformTrack" role="region" aria-label="Audio retention timeline scrubber">
+                <svg id="waveformSvg" class="waveform-svg" viewBox="0 0 100 24" preserveAspectRatio="none"></svg>
+                <div class="waveform-playhead" id="waveformPlayhead" style="left: 0%;"></div>
+                <div class="waveform-hover-line" id="waveformHoverLine" style="display: none; left: 0%;"></div>
+                <div class="waveform-tooltip" id="waveformTooltip" style="display: none;">0:00</div>
+              </div>
+            </div>
+
             <div class="player-actions">
-              <a href="#" id="btnDownloadShort" class="btn btn-primary" style="flex: 1; text-align: center;" download>
+              <a href="#" id="btnDownloadShort" class="btn btn-primary" style="flex: 1; text-align: center;" download aria-label="Download finished vertical short video">
                 <svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                 <span>Download MP4 (<span id="activeClipSizeMb">0.0</span> MB)</span>
               </a>
@@ -1515,6 +1915,41 @@
 
   </main>
 
+  <!-- Studio Status & Hotkeys Bar -->
+  <footer class="studio-footer">
+    <div class="footer-shortcuts">
+      <span class="footer-chip"><kbd>Space</kbd> Play / Pause</span>
+      <span class="footer-chip"><kbd>C</kbd> Copy Caption</span>
+      <span class="footer-chip"><kbd>D</kbd> Download Video</span>
+      <span class="footer-chip"><kbd>1-4</kbd> Social Platforms</span>
+      <span class="footer-chip"><kbd>← / →</kbd> Seek 3s</span>
+      <span class="footer-chip"><kbd>Ctrl + K</kbd> Command Palette</span>
+    </div>
+    <div class="footer-engine">
+      <span>Autonomous 9:16 Kinetic Gimbal</span>
+      <span>•</span>
+      <span>Hormozi ASS Subtitles</span>
+      <span>•</span>
+      <span>Awwwards Precision Standard</span>
+    </div>
+  </footer>
+
+  <!-- Command Palette Modal -->
+  <div class="cmd-overlay" id="cmdOverlay" style="display: none;" role="dialog" aria-modal="true" aria-label="Command Center">
+    <div class="cmd-dialog">
+      <div class="cmd-input-wrap">
+        <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="text" id="cmdSearchInput" class="cmd-input" placeholder="Type a command or search project... (Press Esc to close)" oninput="filterCommandPalette(this.value)">
+        <span class="cmd-kbd">ESC</span>
+      </div>
+      <div class="cmd-list" id="cmdList"></div>
+      <div class="cmd-footer">
+        <span>Use <kbd>↑</kbd> <kbd>↓</kbd> to navigate, <kbd>↵</kbd> to select, <kbd>ESC</kbd> to dismiss</span>
+        <span>Shortcut: <kbd>Ctrl</kbd> + <kbd>K</kbd></span>
+      </div>
+    </div>
+  </div>
+
   <!-- Notification Toast -->
   <div class="toast" id="toast">
     <svg class="svg-icon toast-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -1522,6 +1957,336 @@
   </div>
 
   <script>
+    // ============================================================================
+    // Web Audio Micro-Haptics Engine (10/10 Tactile Sound Design)
+    // ============================================================================
+    const SoundFX = {
+      ctx: null,
+      enabled: localStorage.getItem('studio_sound') !== 'false',
+      init() {
+        if (!this.ctx && (window.AudioContext || window.webkitAudioContext)) {
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+      },
+      playClick() {
+        if (!this.enabled) return;
+        try {
+          this.init();
+          if (!this.ctx) return;
+          if (this.ctx.state === 'suspended') this.ctx.resume();
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(850, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(220, this.ctx.currentTime + 0.022);
+          gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.022);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.022);
+        } catch (e) {}
+      },
+      playCopy() {
+        if (!this.enabled) return;
+        try {
+          this.init();
+          if (!this.ctx) return;
+          if (this.ctx.state === 'suspended') this.ctx.resume();
+          [0, 0.035].forEach((delay, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(idx === 0 ? 920 : 1380, this.ctx.currentTime + delay);
+            gain.gain.setValueAtTime(0.07, this.ctx.currentTime + delay);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + delay + 0.035);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(this.ctx.currentTime + delay);
+            osc.stop(this.ctx.currentTime + delay + 0.035);
+          });
+        } catch (e) {}
+      },
+      playSuccess() {
+        if (!this.enabled) return;
+        try {
+          this.init();
+          if (!this.ctx) return;
+          if (this.ctx.state === 'suspended') this.ctx.resume();
+          [523.25, 659.25].forEach((freq, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime + (idx * 0.07));
+            gain.gain.setValueAtTime(0.08, this.ctx.currentTime + (idx * 0.07));
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + (idx * 0.07) + 0.18);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(this.ctx.currentTime + (idx * 0.07));
+            osc.stop(this.ctx.currentTime + (idx * 0.07) + 0.18);
+          });
+        } catch (e) {}
+      },
+      toggle() {
+        this.enabled = !this.enabled;
+        localStorage.setItem('studio_sound', this.enabled ? 'true' : 'false');
+        const btn = document.getElementById('soundToggleBtn');
+        const label = document.getElementById('soundLabel');
+        if (btn) btn.classList.toggle('active', this.enabled);
+        if (label) label.innerText = this.enabled ? 'Sound' : 'Muted';
+        if (this.enabled) this.playClick();
+      }
+    };
+
+    // ============================================================================
+    // Interactive Retention & Waveform Engine
+    // ============================================================================
+    function renderWaveformBars(duration) {
+      const svg = document.getElementById('waveformSvg');
+      if (!svg) return;
+      const barCount = 64;
+      const dur = duration || 30;
+      let barsHtml = '';
+
+      for (let i = 0; i < barCount; i++) {
+        const pct = (i / barCount);
+        const timeSec = pct * dur;
+        // Natural speech cadence & energy waveform simulation
+        const noise = Math.sin(i * 0.5) * 0.35 + Math.cos(i * 1.2) * 0.25;
+        const baseH = Math.max(3, Math.min(22, 12 + noise * 10 + (Math.sin(i * 3.7) * 4)));
+        const y = (24 - baseH) / 2;
+
+        let fill = 'var(--text-muted)';
+        if (timeSec <= 3.0) {
+          fill = 'var(--blue)'; // Hook Gate
+        } else if (dur - timeSec <= 3.0) {
+          fill = 'var(--emerald)'; // Loop Transition
+        }
+
+        const x = (i / barCount) * 100;
+        const w = (100 / barCount) * 0.72;
+        barsHtml += `<rect x="${x.toFixed(2)}%" y="${y.toFixed(1)}" width="${w.toFixed(2)}%" height="${baseH.toFixed(1)}" rx="1" fill="${fill}" opacity="0.85"></rect>`;
+      }
+      svg.innerHTML = barsHtml;
+    }
+
+    function seekWaveform(event) {
+      const player = document.getElementById('activeVideoPlayer');
+      const track = document.getElementById('waveformTrack');
+      if (!player || !track || !player.duration) return;
+      const rect = track.getBoundingClientRect();
+      const clickX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+      const ratio = clickX / rect.width;
+      player.currentTime = ratio * player.duration;
+      SoundFX.playClick();
+    }
+
+    function hoverWaveform(event) {
+      const player = document.getElementById('activeVideoPlayer');
+      const track = document.getElementById('waveformTrack');
+      const line = document.getElementById('waveformHoverLine');
+      const tip = document.getElementById('waveformTooltip');
+      if (!track || !player || !player.duration) return;
+
+      const rect = track.getBoundingClientRect();
+      const hoverX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+      const pct = (hoverX / rect.width) * 100;
+      const timeSec = (hoverX / rect.width) * player.duration;
+
+      line.style.display = 'block';
+      line.style.left = `${pct}%`;
+
+      tip.style.display = 'block';
+      tip.style.left = `${pct}%`;
+
+      const m = Math.floor(timeSec / 60);
+      const s = Math.floor(timeSec % 60);
+      let phase = 'Arc';
+      if (timeSec <= 3) phase = 'Hook';
+      else if (player.duration - timeSec <= 3) phase = 'Loop';
+      tip.innerText = `${m}:${s < 10 ? '0' : ''}${s} (${phase})`;
+    }
+
+    function leaveWaveform() {
+      const line = document.getElementById('waveformHoverLine');
+      const tip = document.getElementById('waveformTooltip');
+      if (line) line.style.display = 'none';
+      if (tip) tip.style.display = 'none';
+    }
+
+    // ============================================================================
+    // Command Palette & Global Keyboard Center (Ctrl+K)
+    // ============================================================================
+    const COMMAND_ITEMS = [
+      { id: 'discover', label: 'Discover & Explain Moments', icon: '🔍', shortcut: 'Enter', action: () => runPreview() },
+      { id: 'render', label: 'Render Solid Shorts (NVENC)', icon: '⚡', shortcut: '↵', action: () => startRender() },
+      { id: 'preset1', label: 'Preset: Fireship (AI Bubble)', icon: '🎬', shortcut: 'P1', action: () => setPreset('nEaJMdM1djM') },
+      { id: 'preset2', label: 'Preset: Stan Lee (Storytelling)', icon: '📖', shortcut: 'P2', action: () => setPreset('kG3uGk_4a78') },
+      { id: 'copy', label: 'Copy Formatted Caption', icon: '📋', shortcut: 'C', action: () => copyActiveCaption() },
+      { id: 'download', label: 'Download Rendered Short', icon: '⬇', shortcut: 'D', action: () => { const a = document.getElementById('btnDownloadShort'); if (a) a.click(); } },
+      { id: 'view_studio', label: 'Switch to Studio Workspace', icon: '🖥', shortcut: 'G S', action: () => switchView('studio') },
+      { id: 'view_projects', label: 'Open Project History', icon: '📁', shortcut: 'G P', action: () => switchView('projects') },
+      { id: 'view_settings', label: 'Open System Settings', icon: '⚙', shortcut: 'G O', action: () => switchView('settings') },
+      { id: 'toggle_sound', label: 'Toggle Studio Sound FX', icon: '🔊', shortcut: 'S', action: () => SoundFX.toggle() }
+    ];
+
+    let selectedCmdIndex = 0;
+
+    function openCommandPalette() {
+      const modal = document.getElementById('cmdOverlay');
+      const input = document.getElementById('cmdSearchInput');
+      if (!modal || !input) return;
+      modal.style.display = 'flex';
+      input.value = '';
+      selectedCmdIndex = 0;
+      filterCommandPalette('');
+      setTimeout(() => input.focus(), 50);
+      SoundFX.playClick();
+    }
+
+    function closeCommandPalette(event) {
+      const modal = document.getElementById('cmdOverlay');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function filterCommandPalette(query) {
+      const list = document.getElementById('cmdList');
+      if (!list) return;
+      const q = (query || '').toLowerCase().trim();
+      const filtered = COMMAND_ITEMS.filter(c => c.label.toLowerCase().includes(q) || c.id.includes(q));
+
+      if (filtered.length === 0) {
+        list.innerHTML = '<div style="padding:1.5rem; text-align:center; color:var(--text-muted); font-size:0.8rem;">No matching commands found.</div>';
+        return;
+      }
+
+      list.innerHTML = filtered.map((c, idx) => `
+        <button type="button" class="cmd-item ${idx === selectedCmdIndex ? 'selected' : ''}" onclick="executeCommand('${c.id}')" onmouseenter="selectedCmdIndex=${idx}; updateCmdSelection();">
+          <div class="cmd-item-label">
+            <span>${c.icon}</span>
+            <span>${c.label}</span>
+          </div>
+          <span class="cmd-item-shortcut">${c.shortcut}</span>
+        </button>
+      `).join('');
+    }
+
+    function updateCmdSelection() {
+      const items = document.querySelectorAll('.cmd-item');
+      items.forEach((item, idx) => {
+        item.classList.toggle('selected', idx === selectedCmdIndex);
+      });
+    }
+
+    function executeCommand(cmdId) {
+      closeCommandPalette();
+      const cmd = COMMAND_ITEMS.find(c => c.id === cmdId);
+      if (cmd && cmd.action) {
+        SoundFX.playClick();
+        cmd.action();
+      }
+    }
+
+    // Global Studio Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      // Ignore if typing in text input/textarea
+      const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+      const isInput = activeTag === 'input' || activeTag === 'textarea';
+
+      // Ctrl + K or Cmd + K: Open Command Center
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        const modal = document.getElementById('cmdOverlay');
+        if (modal && modal.style.display === 'flex') {
+          closeCommandPalette();
+        } else {
+          openCommandPalette();
+        }
+        return;
+      }
+
+      // If Command Palette is open
+      const cmdModal = document.getElementById('cmdOverlay');
+      if (cmdModal && cmdModal.style.display === 'flex') {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeCommandPalette();
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          const items = document.querySelectorAll('.cmd-item');
+          if (items.length > 0) {
+            selectedCmdIndex = (selectedCmdIndex + 1) % items.length;
+            updateCmdSelection();
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const items = document.querySelectorAll('.cmd-item');
+          if (items.length > 0) {
+            selectedCmdIndex = (selectedCmdIndex - 1 + items.length) % items.length;
+            updateCmdSelection();
+          }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          const q = (document.getElementById('cmdSearchInput').value || '').toLowerCase().trim();
+          const filtered = COMMAND_ITEMS.filter(c => c.label.toLowerCase().includes(q) || c.id.includes(q));
+          if (filtered[selectedCmdIndex]) {
+            executeCommand(filtered[selectedCmdIndex].id);
+          }
+        }
+        return;
+      }
+
+      if (isInput) return; // Don't trigger single-key hotkeys when typing in fields
+
+      // Space: Toggle Play / Pause on active video
+      if (e.code === 'Space') {
+        e.preventDefault();
+        const player = document.getElementById('activeVideoPlayer');
+        if (player) {
+          if (player.paused) player.play(); else player.pause();
+          SoundFX.playClick();
+        }
+      }
+      // C: Copy Active Caption
+      else if (e.key === 'c' || e.key === 'C') {
+        copyActiveCaption();
+      }
+      // D: Download Active Short
+      else if (e.key === 'd' || e.key === 'D') {
+        const btnDl = document.getElementById('btnDownloadShort');
+        if (btnDl && btnDl.href && btnDl.href !== '#') btnDl.click();
+      }
+      // 1-4: Switch Social Platform Caption Tabs
+      else if (e.key === '1') switchPlatformTab('youtube_shorts');
+      else if (e.key === '2') switchPlatformTab('instagram_reels');
+      else if (e.key === '3') switchPlatformTab('tiktok');
+      else if (e.key === '4') switchPlatformTab('full');
+      // ArrowLeft / ArrowRight: Seek 3s
+      else if (e.key === 'ArrowLeft') {
+        const player = document.getElementById('activeVideoPlayer');
+        if (player) { player.currentTime = Math.max(0, player.currentTime - 3); SoundFX.playClick(); }
+      } else if (e.key === 'ArrowRight') {
+        const player = document.getElementById('activeVideoPlayer');
+        if (player) { player.currentTime = Math.min(player.duration || 0, player.currentTime + 3); SoundFX.playClick(); }
+      }
+    });
+
+    // Waveform Track & Modal Event Listeners
+    document.addEventListener('DOMContentLoaded', () => {
+      const track = document.getElementById('waveformTrack');
+      if (track) {
+        track.addEventListener('click', seekWaveform);
+        track.addEventListener('mousemove', hoverWaveform);
+        track.addEventListener('mouseleave', leaveWaveform);
+      }
+      const overlay = document.getElementById('cmdOverlay');
+      if (overlay) {
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay) closeCommandPalette();
+        });
+      }
+    });
+
     // State management
     let activeVideoData = null;
     let activeClipsList = [];
@@ -1542,6 +2307,7 @@
     }
 
     function showToast(msg) {
+      if (typeof SoundFX !== 'undefined') SoundFX.playClick();
       const toast = document.getElementById('toast');
       document.getElementById('toastMsg').innerText = msg;
       toast.classList.add('show');
@@ -1801,6 +2567,37 @@ Storage Base Path:    ${data.storage.data_dir}
 
     function pollStatus(taskId) {
       if (pollInterval) clearInterval(pollInterval);
+
+      // Check if Server-Sent Events (SSE) streaming is available
+      if (window.EventSource) {
+        const sse = new EventSource(`/api/v1/jobs/${taskId}/stream`);
+        sse.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            handleJobUpdate(data, () => sse.close());
+          } catch (err) { console.error(err); }
+        };
+        sse.onerror = () => {
+          sse.close();
+          // Fallback to polling if SSE disconnected
+          if (!pollInterval) startPollingFallback(taskId);
+        };
+        return;
+      }
+      startPollingFallback(taskId);
+    }
+
+    function startPollingFallback(taskId) {
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/v1/jobs/${taskId}`);
+          const data = await res.json();
+          handleJobUpdate(data, () => clearInterval(pollInterval));
+        } catch (e) { console.error(e); }
+      }, 1200);
+    }
+
+    function handleJobUpdate(data, stopFn) {
       const pBar = document.getElementById('renderProgressBar');
       const pMsg = document.getElementById('renderProgressMsg');
       const pPct = document.getElementById('renderProgressPct');
@@ -1809,78 +2606,74 @@ Storage Base Path:    ${data.storage.data_dir}
       const btnRender = document.getElementById('btnRenderAction');
       const btnRenderText = document.getElementById('btnRenderText');
 
-      pollInterval = setInterval(async () => {
-        try {
-          const res = await fetch(`/api/v1/jobs/${taskId}`);
-          const data = await res.json();
-          pBar.style.width = `${data.progress}%`;
-          pPct.innerText = `${data.progress}%`;
-          pStage.innerText = `[${data.current_stage || data.status}]`;
-          pMsg.innerText = data.message || 'Processing video pipeline...';
+      pBar.style.width = `${data.progress}%`;
+      pPct.innerText = `${data.progress}%`;
+      pStage.innerText = `[${data.current_stage || data.status}]`;
+      pMsg.innerText = data.message || 'Processing video pipeline...';
 
-          // Update Stepper
-          const stage = (data.current_stage || '').toLowerCase();
-          const p = data.progress || 0;
-          if (p >= 15) {
-            document.getElementById('stepIngestion').className = 'stage-step done';
-            document.getElementById('stepTracking').className = 'stage-step active';
-          }
-          if (p >= 60) {
-            document.getElementById('stepTracking').className = 'stage-step done';
-            document.getElementById('stepSubtitles').className = 'stage-step active';
-          }
-          if (p >= 80) {
-            document.getElementById('stepSubtitles').className = 'stage-step done';
-            document.getElementById('stepCaptions').className = 'stage-step active';
-          }
+      // Update Stepper
+      const stage = (data.current_stage || '').toLowerCase();
+      const p = data.progress || 0;
+      if (p >= 15) {
+        document.getElementById('stepIngestion').className = 'stage-step done';
+        document.getElementById('stepTracking').className = 'stage-step active';
+      }
+      if (p >= 60) {
+        document.getElementById('stepTracking').className = 'stage-step done';
+        document.getElementById('stepSubtitles').className = 'stage-step active';
+      }
+      if (p >= 80) {
+        document.getElementById('stepSubtitles').className = 'stage-step done';
+        document.getElementById('stepCaptions').className = 'stage-step active';
+      }
 
-          if (data.status === 'completed' || data.status === 'COMPLETED') {
-            clearInterval(pollInterval);
-            clearInterval(renderTimerInterval);
-            pBar.style.background = 'var(--emerald)';
-            pMsg.innerText = 'Render Complete! All Shorts validated and loaded below.';
-            btnCancel.style.display = 'none';
+      if (data.status === 'completed' || data.status === 'COMPLETED') {
+        if (stopFn) stopFn();
+        if (pollInterval) clearInterval(pollInterval);
+        clearInterval(renderTimerInterval);
+        pBar.style.background = 'var(--emerald)';
+        pMsg.innerText = 'Render Complete! All Shorts validated and loaded below.';
+        btnCancel.style.display = 'none';
 
-            ['stepIngestion', 'stepTracking', 'stepSubtitles', 'stepCaptions'].forEach(s => {
-              document.getElementById(s).className = 'stage-step done';
-            });
+        ['stepIngestion', 'stepTracking', 'stepSubtitles', 'stepCaptions'].forEach(s => {
+          document.getElementById(s).className = 'stage-step done';
+        });
 
-            btnRender.disabled = false;
-            btnRender.style.opacity = '1';
-            btnRenderText.innerText = 'Render Solid Shorts';
+        btnRender.disabled = false;
+        btnRender.style.opacity = '1';
+        btnRenderText.innerText = 'Render Solid Shorts';
 
-            const elapsedSec = Math.round((Date.now() - renderStartTime) / 1000);
-            showToast(`Shorts rendered in ${elapsedSec}s!`);
+        const elapsedSec = Math.round((Date.now() - renderStartTime) / 1000);
+        if (typeof SoundFX !== 'undefined') SoundFX.playSuccess();
+        showToast(`Shorts rendered in ${elapsedSec}s!`);
 
-            if (data.clips && data.clips.length > 0) {
-              displayRenderedClips(data.clips);
-            } else {
-              loadRecentClips();
-            }
-            loadProjects();
-          } else if (data.status === 'failed' || data.status === 'FAILED') {
-            clearInterval(pollInterval);
-            clearInterval(renderTimerInterval);
-            pBar.style.background = 'var(--rose)';
-            pMsg.innerText = 'Render Failed: ' + (data.error || 'Pipeline error');
-            btnCancel.style.display = 'none';
-            btnRender.disabled = false;
-            btnRender.style.opacity = '1';
-            btnRenderText.innerText = 'Render Solid Shorts';
-          } else if (data.status === 'cancelled' || data.status === 'CANCELLED') {
-            clearInterval(pollInterval);
-            clearInterval(renderTimerInterval);
-            pBar.style.background = 'var(--amber)';
-            pMsg.innerText = 'Job was cancelled by operator.';
-            btnCancel.style.display = 'none';
-            btnRender.disabled = false;
-            btnRender.style.opacity = '1';
-            btnRenderText.innerText = 'Render Solid Shorts';
-          }
-        } catch (e) {
-          console.error(e);
+        if (data.clips && data.clips.length > 0) {
+          displayRenderedClips(data.clips);
+        } else {
+          loadRecentClips();
         }
-      }, 1200);
+        loadProjects();
+      } else if (data.status === 'failed' || data.status === 'FAILED') {
+        if (stopFn) stopFn();
+        if (pollInterval) clearInterval(pollInterval);
+        clearInterval(renderTimerInterval);
+        pBar.style.background = 'var(--rose)';
+        pMsg.innerText = 'Render Failed: ' + (data.error || 'Pipeline error');
+        btnCancel.style.display = 'none';
+        btnRender.disabled = false;
+        btnRender.style.opacity = '1';
+        btnRenderText.innerText = 'Render Solid Shorts';
+      } else if (data.status === 'cancelled' || data.status === 'CANCELLED') {
+        if (stopFn) stopFn();
+        if (pollInterval) clearInterval(pollInterval);
+        clearInterval(renderTimerInterval);
+        pBar.style.background = 'var(--amber)';
+        pMsg.innerText = 'Job was cancelled by operator.';
+        btnCancel.style.display = 'none';
+        btnRender.disabled = false;
+        btnRender.style.opacity = '1';
+        btnRenderText.innerText = 'Render Solid Shorts';
+      }
     }
 
     async function cancelActiveJob() {
@@ -1933,6 +2726,23 @@ Storage Base Path:    ${data.storage.data_dir}
         player.poster = currentSelectedClip.poster_url;
       }
       player.load();
+
+      // Render Interactive Waveform for this Short's duration
+      renderWaveformBars(currentSelectedClip.duration_seconds || currentSelectedClip.duration || 30);
+      player.ontimeupdate = () => {
+        const pHead = document.getElementById('waveformPlayhead');
+        const pTime = document.getElementById('waveformTime');
+        if (!player.duration) return;
+        const pct = (player.currentTime / player.duration) * 100;
+        if (pHead) pHead.style.left = `${pct}%`;
+        if (pTime) {
+          const curM = Math.floor(player.currentTime / 60);
+          const curS = Math.floor(player.currentTime % 60);
+          const totM = Math.floor(player.duration / 60);
+          const totS = Math.floor(player.duration % 60);
+          pTime.innerText = `${curM}:${curS < 10 ? '0' : ''}${curS} / ${totM}:${totS < 10 ? '0' : ''}${totS}`;
+        }
+      };
 
       // Download button
       const btnDl = document.getElementById('btnDownloadShort');
@@ -2006,6 +2816,7 @@ Storage Base Path:    ${data.storage.data_dir}
       if (!text) return showToast('Caption is empty');
       try {
         await navigator.clipboard.writeText(text);
+        if (typeof SoundFX !== 'undefined') SoundFX.playCopy();
         showToast('Caption copied to clipboard!');
       } catch (e) {
         showToast('Clipboard copy failed');
