@@ -1004,8 +1004,405 @@
       align-items: start;
     }
 
+    /* ==========================================================================
+       RESPONSIVE DESIGN SYSTEM (Mobile, Tablet, Foldable & Small Laptop)
+       ========================================================================== */
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .telemetry-mobile {
+      display: none;
+    }
+    .action-row-wrap {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      align-items: center;
+      border-top: 1px solid var(--border);
+      padding-top: 0.85rem;
+    }
+    .caption-card-actions {
+      display: flex;
+      gap: 0.4rem;
+    }
+    .project-search-wrap {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    /* Tablet & Small Laptops (<= 1080px) */
     @media (max-width: 1080px) {
-      .studio-split { grid-template-columns: 1fr; }
+      .studio-split {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+      .player-column {
+        max-width: 480px;
+        margin: 0 auto;
+        width: 100%;
+      }
+      .projects-grid {
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      }
+    }
+
+    /* Tablet Portrait & Large Foldables (<= 860px) */
+    @media (max-width: 860px) {
+      header {
+        height: auto;
+        min-height: 56px;
+        padding: 0.75rem 1rem;
+        flex-wrap: wrap;
+        row-gap: 0.75rem;
+      }
+      .brand {
+        order: 1;
+      }
+      .header-actions {
+        order: 2;
+        margin-left: auto;
+      }
+      .nav-tabs {
+        order: 3;
+        width: 100%;
+        display: flex;
+      }
+      .nav-btn {
+        flex: 1;
+        justify-content: center;
+        padding: 0.5rem 0.6rem;
+        font-size: 0.8rem;
+      }
+      .telemetry-desktop {
+        display: none;
+      }
+      .telemetry-mobile {
+        display: inline;
+      }
+      .kbd-badge {
+        display: none;
+      }
+    }
+
+    /* Standard Mobile Phones (<= 640px) */
+    @media (max-width: 640px) {
+      body {
+        font-size: 14px;
+        -webkit-text-size-adjust: 100%;
+      }
+      .studio-container {
+        padding: 0.75rem 0.65rem;
+        gap: 1rem;
+      }
+      .card {
+        padding: 0.95rem;
+        border-radius: var(--radius-sm);
+      }
+      .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.6rem;
+      }
+      .card-header > div:last-child {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .brand-title {
+        font-size: 0.95rem;
+      }
+      .brand-icon {
+        width: 28px;
+        height: 28px;
+      }
+      .brand-badge {
+        font-size: 0.6rem;
+        padding: 0.1rem 0.35rem;
+      }
+
+      /* Ingestion Form Controls */
+      .input-row {
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .input-row .btn-secondary {
+        width: 100%;
+        justify-content: center;
+        min-height: 44px;
+      }
+      .text-input {
+        font-size: 16px; /* Prevents iOS Safari auto-zoom on focus */
+        padding: 0.75rem 0.85rem 0.75rem 2.4rem;
+        min-height: 44px;
+      }
+      .quick-chips {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        padding-bottom: 0.4rem;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+      .quick-chips::-webkit-scrollbar {
+        display: none;
+      }
+      .quick-chip {
+        flex-shrink: 0;
+        white-space: nowrap;
+        min-height: 34px;
+      }
+      .config-grid {
+        grid-template-columns: 1fr;
+        padding: 0.85rem;
+        gap: 0.85rem;
+      }
+      .select-input {
+        font-size: 15px;
+        min-height: 44px;
+        padding: 0.6rem 0.85rem;
+      }
+      .toggle-group {
+        gap: 0.75rem;
+      }
+      .toggle-label {
+        font-size: 0.825rem;
+        padding: 0.2rem 0;
+      }
+      .toggle-label input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+      }
+      .action-row-wrap {
+        flex-direction: column-reverse;
+        width: 100%;
+        gap: 0.6rem;
+      }
+      .action-row-wrap .btn {
+        width: 100%;
+        justify-content: center;
+        min-height: 46px;
+        font-size: 0.875rem;
+      }
+
+      /* Progress Banners */
+      .progress-card {
+        padding: 1rem;
+      }
+      .progress-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.6rem;
+      }
+      .progress-header > div:last-child {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .stage-stepper {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.4rem;
+      }
+      .stage-step {
+        padding: 0.45rem 0.5rem;
+        font-size: 0.7rem;
+        min-height: 38px;
+      }
+
+      /* Source Video Insight Card */
+      .video-hero {
+        flex-direction: column;
+      }
+      .video-thumb {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 16/9;
+        max-width: 100%;
+      }
+      .video-meta-row {
+        flex-wrap: wrap;
+        font-size: 0.725rem;
+      }
+      .candidates-grid {
+        grid-template-columns: 1fr;
+      }
+
+      /* Rendered Shorts Showcase & 9:16 Video Player */
+      .clip-selector-strip {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 0.5rem;
+        scrollbar-width: none;
+      }
+      .clip-selector-strip::-webkit-scrollbar {
+        display: none;
+      }
+      .clip-pill {
+        flex-shrink: 0;
+        white-space: nowrap;
+        min-height: 40px;
+        padding: 0.45rem 0.85rem;
+      }
+      .phone-mockup {
+        max-width: min(290px, 80vw);
+        border-radius: 28px;
+      }
+      .phone-notch {
+        width: 76px;
+        height: 15px;
+      }
+      .waveform-container {
+        padding: 0.65rem 0.7rem;
+      }
+      .waveform-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.35rem;
+      }
+      .waveform-meta {
+        align-self: flex-end;
+      }
+      .player-actions {
+        flex-direction: column;
+        width: 100%;
+        gap: 0.5rem;
+      }
+      .player-actions .btn-primary {
+        width: 100%;
+        min-height: 44px;
+        justify-content: center;
+      }
+      .player-actions .brand-badge {
+        width: 100%;
+        text-align: center;
+        padding: 0.45rem;
+      }
+
+      /* Intelligence Metrics */
+      .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+      }
+      .metric-box {
+        padding: 0.6rem 0.7rem;
+      }
+      .metric-val {
+        font-size: 1.05rem;
+      }
+
+      /* Caption Studio */
+      .caption-card-actions {
+        width: 100%;
+      }
+      .caption-card-actions .btn {
+        flex: 1;
+        justify-content: center;
+        min-height: 40px;
+      }
+      .platform-tabs {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 0.5rem;
+        scrollbar-width: none;
+      }
+      .platform-tabs::-webkit-scrollbar {
+        display: none;
+      }
+      .platform-tab-btn {
+        flex-shrink: 0;
+        white-space: nowrap;
+        padding: 0.45rem 0.75rem;
+        min-height: 38px;
+      }
+      .caption-breakdown-row {
+        padding: 0.65rem 0.85rem;
+      }
+      .breakdown-item {
+        flex-direction: column;
+        gap: 0.15rem;
+      }
+      .breakdown-label {
+        width: auto;
+      }
+
+      /* Project Archive View */
+      .projects-grid {
+        grid-template-columns: 1fr;
+      }
+      .project-search-wrap {
+        width: 100%;
+      }
+      .project-search-wrap .text-input {
+        width: 100% !important;
+      }
+
+      /* Command Palette Dialog */
+      .cmd-overlay {
+        padding: 1rem 0.75rem;
+        padding-top: 4vh;
+      }
+      .cmd-dialog {
+        max-width: 100%;
+        border-radius: 10px;
+      }
+      .cmd-item {
+        min-height: 44px; /* Touch-friendly tap target */
+      }
+      .cmd-footer {
+        flex-direction: column;
+        gap: 0.3rem;
+        align-items: flex-start;
+      }
+
+      /* Studio Footer Bar */
+      .studio-footer {
+        flex-direction: column;
+        gap: 0.75rem;
+        text-align: center;
+        padding: 1rem;
+      }
+      .footer-shortcuts {
+        display: none; /* Hide desktop keyboard hints on touch devices */
+      }
+      .footer-engine {
+        justify-content: center;
+        flex-wrap: wrap;
+        font-size: 0.7rem;
+      }
+
+      /* Floating Toast Notification */
+      .toast {
+        bottom: 1rem;
+        right: 1rem;
+        left: 1rem;
+        justify-content: center;
+        font-size: 0.8rem;
+      }
+    }
+
+    /* Compact Smartphones (<= 380px) */
+    @media (max-width: 380px) {
+      .brand-title {
+        font-size: 0.85rem;
+      }
+      .nav-btn span {
+        font-size: 0.725rem;
+      }
+      .nav-btn svg {
+        display: none;
+      }
+      .phone-mockup {
+        max-width: 245px;
+      }
+      .stage-stepper {
+        grid-template-columns: 1fr;
+      }
     }
 
     /* Left: Video Player Column */
@@ -1432,8 +1829,8 @@
       </button>
     </div>
 
-    <div style="display: flex; align-items: center; gap: 0.6rem;">
-      <button class="cmd-trigger-btn" onclick="openCommandPalette()" aria-label="Open Command Center (Ctrl+K)" title="Command Center (Ctrl+K)">
+    <div class="header-actions">
+      <button class="cmd-trigger-btn" onclick="openCommandPalette()" aria-label="Open Command Center" title="Command Center">
         <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
         <span>Commands</span>
         <kbd class="kbd-badge">Ctrl K</kbd>
@@ -1446,7 +1843,8 @@
 
       <div class="telemetry-pill" id="telemetryPill">
         <span class="telemetry-dot"></span>
-        <span id="telemetryText">Online • NVIDIA GeForce GTX 1650 • Gemini 3.5 Flash</span>
+        <span class="telemetry-desktop" id="telemetryText">Online • NVIDIA GeForce GTX 1650 • Gemini 3.5 Flash</span>
+        <span class="telemetry-mobile">Online</span>
       </div>
     </div>
   </header>
@@ -1537,7 +1935,7 @@
         </div>
 
         <!-- Action Row -->
-        <div style="display: flex; gap: 0.75rem; justify-content: flex-end; align-items: center; border-top: 1px solid var(--border); padding-top: 0.85rem;">
+        <div class="action-row-wrap">
           <button class="btn btn-preview" id="btnPreviewAction" onclick="runPreview()">
             <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             <span id="btnPreviewText">Discover & Explain Moments</span>
@@ -1725,7 +2123,7 @@
                   <svg class="svg-icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                   <span>Social Caption & Creator Attribution</span>
                 </div>
-                <div style="display: flex; gap: 0.4rem;">
+                <div class="caption-card-actions">
                   <button class="btn btn-sm btn-secondary" onclick="regenerateCaption()">
                     <svg class="svg-icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                     <span>Regenerate</span>
@@ -1788,7 +2186,7 @@
             </div>
             <div class="card-subtitle">All previous clipping sessions and rendered vertical Shorts are durably preserved on disk.</div>
           </div>
-          <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <div class="project-search-wrap">
             <input type="text" id="projectSearchInput" class="text-input" style="padding-left: 1rem; width: 220px;" placeholder="Filter projects..." oninput="filterProjects()">
             <button class="btn btn-secondary" onclick="loadProjects()">
               <svg class="svg-icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
@@ -2278,6 +2676,20 @@
         track.addEventListener('click', seekWaveform);
         track.addEventListener('mousemove', hoverWaveform);
         track.addEventListener('mouseleave', leaveWaveform);
+
+        // Mobile Touch Scrubbing
+        const handleTouchSeek = (e) => {
+          if (!e.touches || !e.touches[0]) return;
+          const touch = e.touches[0];
+          const player = document.getElementById('activeVideoPlayer');
+          if (!player || !player.duration) return;
+          const rect = track.getBoundingClientRect();
+          const touchX = Math.max(0, Math.min(rect.width, touch.clientX - rect.left));
+          const ratio = touchX / rect.width;
+          player.currentTime = ratio * player.duration;
+        };
+        track.addEventListener('touchstart', handleTouchSeek, { passive: true });
+        track.addEventListener('touchmove', handleTouchSeek, { passive: true });
       }
       const overlay = document.getElementById('cmdOverlay');
       if (overlay) {
