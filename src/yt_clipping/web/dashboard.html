@@ -1650,7 +1650,8 @@ Storage Base Path:    ${data.storage.data_dir}
         aMsg.innerText = `Discovered ${(data.candidates || []).length} coherent clipping opportunities.`;
 
         activeVideoData = data;
-        const meta = data.metadata || {};
+        const meta = data.metadata || data.source_metadata || {};
+        const candList = data.candidates || data.solid_clips || [];
 
         // Smooth reveal of source overview card
         setTimeout(() => {
@@ -1669,11 +1670,11 @@ Storage Base Path:    ${data.storage.data_dir}
           const secs = Math.floor((meta.duration || 0) % 60);
           document.getElementById('sourceVideoDuration').innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
           document.getElementById('sourceVideoDate').innerText = (meta.published_at || '').slice(0, 10);
-          document.getElementById('sourceCandidatesCount').innerText = `${(data.candidates || []).length} High-Potential Shorts Moments Discovered`;
+          document.getElementById('sourceCandidatesCount').innerText = `${candList.length} High-Potential Shorts Moments Discovered`;
 
           // Render Candidates
           const cList = document.getElementById('candidatesList');
-          cList.innerHTML = (data.candidates || []).map((c, i) => `
+          cList.innerHTML = candList.map((c, i) => `
             <div class="candidate-card">
               <div class="cand-header">
                 <span class="cand-badge">#${i + 1} Highlight</span>

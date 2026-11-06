@@ -277,27 +277,38 @@ def api_preview(req: PreviewRequest) -> Dict[str, Any]:
     for c in decision.selected_candidates:
         intelligence = caption_synthesizer.explain_clip(c, video_info)
         caption_pkg = caption_synthesizer.generate_caption_package(c, video_info)
+        start_min = int(c.start_seconds // 60)
+        start_sec = int(c.start_seconds % 60)
+        end_min = int(c.end_seconds // 60)
+        end_sec = int(c.end_seconds % 60)
         solid_clips_payload.append({
             "candidate_id": c.candidate_id,
             "start_seconds": round(c.start_seconds, 1),
             "end_seconds": round(c.end_seconds, 1),
+            "start_time": f"{start_min}:{start_sec:02d}",
+            "end_time": f"{end_min}:{end_sec:02d}",
+            "duration": round(c.duration_seconds, 1),
             "duration_seconds": round(c.duration_seconds, 1),
             "score": round(c.score, 1),
             "hook_title": caption_pkg.hook_title or c.hook_title or "Key Moment",
+            "suggested_description": getattr(caption_pkg, "core_summary", "") or getattr(caption_pkg, "summary", "") or intelligence.why_it_works,
             "rationale": c.rationale,
             "why_it_works": intelligence.why_it_works,
             "intelligence": intelligence.to_dict(),
             "caption_package": caption_pkg.to_dict(),
         })
 
+    meta_dict = video_info.to_dict() if video_info else None
     return {
         "video_id": video_id,
-        "source_metadata": video_info.to_dict() if video_info else None,
+        "metadata": meta_dict,
+        "source_metadata": meta_dict,
+        "candidates": solid_clips_payload,
+        "solid_clips": solid_clips_payload,
         "total_candidates_found": len(candidates),
         "recommended_solid_shorts_count": decision.recommended_count,
         "capacity_limit": decision.capacity_limit,
         "decision_reasons": decision.reasons,
-        "solid_clips": solid_clips_payload,
     }
 
 
