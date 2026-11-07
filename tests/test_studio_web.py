@@ -260,18 +260,22 @@ def test_api_regenerate_caption_endpoint(client, tmp_path):
     from yt_clipping.orchestration.project_store import ClipSidecarRecord
     from yt_clipping.web.server import project_store
 
+    dummy_file = tmp_path / "dummy.mp4"
+    dummy_file.write_bytes(b"dummy mp4 valid content test " * 100)
+
     sidecar = ClipSidecarRecord(
         clip_id="test_regen_clip",
         project_id="proj_regen",
-        video_id="nEaJMdM1djM",
-        file_path=str(tmp_path / "dummy.mp4"),
+        video_id="test_mock_video_99",
+        file_path=str(dummy_file),
         relative_url="/clips/dummy.mp4",
         start_seconds=10.0,
         end_seconds=35.0,
         duration_seconds=25.0,
         score=88.0,
+        file_size_bytes=len(dummy_file.read_bytes()),
         caption_package={"hook_title": "Old Title", "full_copy_caption": "Old Caption"},
-        source_metadata={"video_id": "nEaJMdM1djM", "channel_title": "Tech Creator", "title": "Tech Talk"},
+        source_metadata={"video_id": "test_mock_video_99", "channel_title": "Tech Creator", "title": "Tech Talk"},
     )
     project_store.save_clip_sidecar(sidecar)
 
@@ -279,8 +283,6 @@ def test_api_regenerate_caption_endpoint(client, tmp_path):
     bad_res = client.post("/api/v1/clips/nonexistent_clip_xyz/regenerate_caption")
     assert bad_res.status_code == 404
 
-    dummy_file = tmp_path / "dummy.mp4"
-    dummy_file.write_bytes(b"dummy mp4")
     try:
         # 2. Existing clip succeeds and updates sidecar
         res = client.post("/api/v1/clips/test_regen_clip/regenerate_caption")
@@ -297,6 +299,9 @@ def test_api_regenerate_caption_endpoint(client, tmp_path):
         for f in glob.glob(os.path.join(project_store.rendered_clips_dir, "*test_regen_clip*")):
             try: os.remove(f)
             except OSError: pass
+        for f in [os.path.join(project_store.rendered_clips_dir, "dummy.json")]:
+            try: os.remove(f)
+            except OSError: pass
 
 
 def test_api_clips_includes_playback_and_validation(client, tmp_path):
@@ -305,7 +310,7 @@ def test_api_clips_includes_playback_and_validation(client, tmp_path):
     from yt_clipping.web.server import project_store
 
     mp4_file = tmp_path / "pb.mp4"
-    mp4_file.write_bytes(b"dummy mp4 content")
+    mp4_file.write_bytes(b"dummy mp4 content mock test " * 100)
 
     sidecar = ClipSidecarRecord(
         clip_id="test_clip_playback",
@@ -318,6 +323,7 @@ def test_api_clips_includes_playback_and_validation(client, tmp_path):
         duration_seconds=20.0,
         score=91.0,
         status="COMPLETED",
+        file_size_bytes=len(mp4_file.read_bytes()),
     )
     project_store.save_clip_sidecar(sidecar)
 
@@ -334,6 +340,9 @@ def test_api_clips_includes_playback_and_validation(client, tmp_path):
         import shutil, glob
         shutil.rmtree(project_store.get_project_dir("proj_pb"), ignore_errors=True)
         for f in glob.glob(os.path.join(project_store.rendered_clips_dir, "*test_clip_playback*")):
+            try: os.remove(f)
+            except OSError: pass
+        for f in [os.path.join(project_store.rendered_clips_dir, "pb.json")]:
             try: os.remove(f)
             except OSError: pass
 
@@ -361,3 +370,17 @@ def test_api_clip_poster_endpoint(client, tmp_path):
 
 
 
+
+
+def test_api_trending_top10m_endpoint(client):
+    """Verifies GET /api/v1/trending/top10m returns verified 10M+ channel videos."""
+    res = client.get("/api/v1/trending/top10m?limit=5")
+    assert res.status_code == 200
+    data = res.json()
+    assert isinstance(data, list)
+    assert len(data) > 0
+    first = data[0]
+    assert "video_id" in first
+    assert "channel_subscribers" in first
+    assert first["channel_subscribers"] >= 10_000_000
+    assert "url" in first

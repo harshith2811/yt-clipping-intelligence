@@ -282,20 +282,23 @@ class ProjectStore:
                     data = json.load(f)
                 record = ClipSidecarRecord.from_dict(data)
                 # Check media existence on disk
-                if not os.path.exists(record.file_path):
+                if not os.path.exists(record.file_path) or os.path.getsize(record.file_path) < 1024:
                     # Check if present in rendered_clips_dir
                     alt_path = os.path.join(self.rendered_clips_dir, os.path.basename(record.file_path))
-                    if os.path.exists(alt_path):
+                    if os.path.exists(alt_path) and os.path.getsize(alt_path) >= 1024:
                         record.file_path = alt_path
                     else:
                         record.status = "MISSING_MEDIA"
-                seen_clips[record.clip_id] = record
+                if record.status != "MISSING_MEDIA":
+                    seen_clips[record.clip_id] = record
             except Exception as e:
                 logger.warning(f"Error reading sidecar {s_file}: {e}")
 
         # 2. Scan rendered_clips directory for legacy clips without project sidecar
         if not project_id:
             for mp4_file in glob.glob(os.path.join(self.rendered_clips_dir, "*.mp4")):
+                if os.path.getsize(mp4_file) < 1024:
+                    continue
                 fname = os.path.basename(mp4_file)
                 base_name = os.path.splitext(fname)[0]
                 cid = base_name.replace("clip_", "")

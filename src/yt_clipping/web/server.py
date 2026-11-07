@@ -604,6 +604,18 @@ async def api_stream_job_events(job_id: str):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+@app.get("/api/v1/trending/top10m")
+def api_get_top10m_trending(limit: int = 15) -> List[Dict[str, Any]]:
+    """Returns curated and live trending videos from channels with > 10M subscribers."""
+    try:
+        from top_trending_videos_in_youtube import TopTrending10MFetcher
+        fetcher = TopTrending10MFetcher()
+        videos = fetcher.get_top_trending_10m_list(limit=limit)
+        return [v.to_dict() for v in videos]
+    except Exception as e:
+        logger.warning(f"Error fetching 10M trending videos: {e}")
+        return []
+
 
 @app.get("/api/v1/clips")
 def api_list_clips(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -611,7 +623,7 @@ def api_list_clips(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
     sidecars = project_store.list_clips(project_id=project_id)
     clips = []
     for s in sidecars:
-        if not s.file_path or not os.path.exists(s.file_path):
+        if not s.file_path or not os.path.exists(s.file_path) or os.path.getsize(s.file_path) < 1024 or s.status == "MISSING_MEDIA":
             continue
         fname = os.path.basename(s.file_path)
         clips.append({
@@ -795,7 +807,10 @@ def api_list_projects() -> List[Dict[str, Any]]:
     out = []
     for p in projects:
         data = p.to_dict()
-        clips = project_store.list_clips(project_id=p.project_id)
+        clips = [
+            c for c in project_store.list_clips(project_id=p.project_id)
+            if c.file_path and os.path.exists(c.file_path) and os.path.getsize(c.file_path) >= 1024 and c.status != "MISSING_MEDIA"
+        ]
         data["clips"] = [
             {
                 "clip_id": c.clip_id,
@@ -821,7 +836,10 @@ def api_get_project(project_id: str) -> Dict[str, Any]:
     project = project_store.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project ID not found.")
-    clips = project_store.list_clips(project_id=project_id)
+    clips = [
+        c for c in project_store.list_clips(project_id=project_id)
+        if c.file_path and os.path.exists(c.file_path) and os.path.getsize(c.file_path) >= 1024 and c.status != "MISSING_MEDIA"
+    ]
     data = project.to_dict()
     data["clips"] = [c.to_dict() for c in clips]
     data["clips_count"] = len(clips)
