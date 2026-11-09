@@ -753,6 +753,51 @@
       border-color: #353d54;
       box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.08);
     }
+    .phone-preview-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 310px;
+      margin: 0 auto 0.6rem auto;
+      padding: 0 0.25rem;
+    }
+    .phone-preview-title {
+      font-size: 0.725rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .btn-notch-toggle {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.55rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      border-radius: 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      transition: all 0.15s ease;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-notch-toggle:hover {
+      color: var(--text-main);
+      border-color: var(--border-hover);
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .btn-notch-toggle.active {
+      color: var(--blue);
+      border-color: rgba(59, 130, 246, 0.4);
+      background: rgba(37, 99, 235, 0.1);
+    }
+    .phone-mockup.clean-frame {
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7);
+    }
     .phone-notch {
       position: absolute;
       top: 10px;
@@ -2419,12 +2464,19 @@
 
           <!-- Left: 9:16 Video Player Column with Tactile Notch & Waveform -->
           <div class="player-column">
+            <div class="phone-preview-toolbar">
+              <span class="phone-preview-title">9:16 Short Preview</span>
+              <button type="button" class="btn-notch-toggle" id="btnToggleNotch" onclick="togglePhoneNotch()" title="Toggle smartphone camera notch & screen bezel">
+                <svg class="svg-icon" viewBox="0 0 24 24" style="width: 13px; height: 13px;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                <span id="toggleNotchLabel">Notch: ON</span>
+              </button>
+            </div>
             <div class="phone-mockup" id="phoneContainer">
-              <div class="phone-notch">
+              <div class="phone-notch" id="phoneNotch">
                 <div class="phone-lens"></div>
                 <div class="phone-speaker"></div>
               </div>
-              <div class="phone-glare"></div>
+              <div class="phone-glare" id="phoneGlare"></div>
               <video id="activeVideoPlayer" controls preload="metadata" playsinline></video>
               <div id="videoLoadingSpinner" class="video-overlay video-loading" style="display: none;">
                 <div class="spinner"></div>
@@ -5321,9 +5373,54 @@ async function submitPublishJob() {
     });
 
     // Initialization on window boot
-    window.addEventListener('DOMContentLoaded', async () => {
+        // Toggle Phone Camera Notch & Frame
+    function togglePhoneNotch() {
+      const notch = document.getElementById('phoneNotch');
+      const glare = document.getElementById('phoneGlare');
+      const phone = document.getElementById('phoneContainer');
+      const btn = document.getElementById('btnToggleNotch');
+      const btnLabel = document.getElementById('toggleNotchLabel');
+      const isHidden = notch && notch.style.display === 'none';
+
+      if (isHidden) {
+        if (notch) notch.style.display = 'flex';
+        if (glare) glare.style.display = 'block';
+        if (phone) phone.classList.remove('clean-frame');
+        if (btn) btn.classList.remove('active');
+        if (btnLabel) btnLabel.innerText = 'Notch: ON';
+        localStorage.setItem('yt_clip_notch', 'on');
+        showToast('Phone camera notch enabled');
+      } else {
+        if (notch) notch.style.display = 'none';
+        if (glare) glare.style.display = 'none';
+        if (phone) phone.classList.add('clean-frame');
+        if (btn) btn.classList.add('active');
+        if (btnLabel) btnLabel.innerText = 'Notch: OFF';
+        localStorage.setItem('yt_clip_notch', 'off');
+        showToast('Phone notch hidden (Clean preview frame)');
+      }
+    }
+
+    function initNotchPreference() {
+      const pref = localStorage.getItem('yt_clip_notch');
+      if (pref === 'off') {
+        const notch = document.getElementById('phoneNotch');
+        const glare = document.getElementById('phoneGlare');
+        const phone = document.getElementById('phoneContainer');
+        const btn = document.getElementById('btnToggleNotch');
+        const btnLabel = document.getElementById('toggleNotchLabel');
+        if (notch) notch.style.display = 'none';
+        if (glare) glare.style.display = 'none';
+        if (phone) phone.classList.add('clean-frame');
+        if (btn) btn.classList.add('active');
+        if (btnLabel) btnLabel.innerText = 'Notch: OFF';
+      }
+    }
+
+window.addEventListener('DOMContentLoaded', async () => {
       checkHealth();
       loadProjects();
+      initNotchPreference();
       loadRecentClips();
 
       // Deep link support via tab parameter
