@@ -235,7 +235,7 @@ def api_get_metadata(req: MetadataRequest) -> Dict[str, Any]:
         return info.to_dict()
     except Exception as e:
         logger.error(f"Metadata retrieval failed for {video_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Metadata error: {e}")
+        raise HTTPException(status_code=400, detail=f"Metadata error: {e}")
 
 
 @app.post("/api/v1/preview")
@@ -267,8 +267,22 @@ def api_preview(req: PreviewRequest) -> Dict[str, Any]:
     try:
         candidates = pipeline.get_candidates(video_id=video_id, min_duration=req.min_duration, max_duration=req.max_duration)
     except Exception as e:
-        logger.error(f"Preview extraction failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        err_msg = str(e)
+        logger.error(f"Preview extraction failed: {err_msg}")
+        err_lower = err_msg.lower()
+        if "unavailable" in err_lower or "private" in err_lower or "not found" in err_lower:
+            hint = " (Check for common character typos like letter 'O' vs digit '0')." if ("o" in video_id.lower() or "0" in video_id) else ""
+            raise HTTPException(
+                status_code=400,
+                detail=f"This YouTube video ({video_id}) is unavailable or private on YouTube.{hint} Please check the link or try another video.",
+            )
+        elif "copyright" in err_lower or "blocked" in err_lower:
+            raise HTTPException(
+                status_code=400,
+                detail="This video cannot be processed due to copyright or geographic distribution restrictions.",
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Failed to analyze video: {err_msg}")
 
     # Retrieve heatmap if available
     heatmap_data = None

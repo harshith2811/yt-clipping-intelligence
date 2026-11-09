@@ -5,7 +5,7 @@ transcription, rendering, or publishing pipelines.
 Backed by SQLite transactional persistence to survive restarts, with JSON ledger support.
 """
 
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 import json
 import os
 import sqlite3
@@ -124,11 +124,55 @@ class LocalRightsPolicy(RightsPolicy):
             json.dump(data, f, indent=2)
         os.replace(temp_path, self.ledger_path)
 
-    def register_rights(self, manifest: RightsManifest) -> None:
+    def register_rights(
+        self,
+        manifest: Optional[RightsManifest] = None,
+        *,
+        video_id: Optional[str] = None,
+        basis: Optional[Any] = None,
+        owner: Optional[str] = None,
+        audit_notes: Optional[str] = None,
+        status: Optional[Any] = None,
+        **kwargs,
+    ) -> RightsManifest:
         """Registers and durably persists a rights manifest for a video."""
+        if manifest is None:
+            if not video_id:
+                raise ValueError("Either manifest or video_id must be provided to register_rights.")
+            basis_val = RightsBasis.OPERATOR_ASSET
+            if isinstance(basis, str):
+                try:
+                    basis_val = RightsBasis(basis)
+                except Exception:
+                    basis_val = RightsBasis.OPERATOR_ASSET
+            elif isinstance(basis, RightsBasis):
+                basis_val = basis
+
+            status_val = RightsStatus.VERIFIED
+            if isinstance(status, str):
+                try:
+                    status_val = RightsStatus(status)
+                except Exception:
+                    status_val = RightsStatus.VERIFIED
+            elif isinstance(status, RightsStatus):
+                status_val = status
+
+            now_iso = datetime.now(timezone.utc).isoformat()
+            manifest = RightsManifest(
+                rights_id=f"rights_{video_id}",
+                video_id=video_id,
+                basis=basis_val,
+                status=status_val,
+                owner_name=owner or "Studio Operator",
+                proof_reference="Operator registration via Web Studio",
+                verified_at=now_iso,
+                audit_notes=audit_notes or "Auto-registered rights manifest.",
+            )
+
         self._manifests[manifest.video_id] = manifest
         self._upsert_db(manifest)
         self._export_to_json()
+        return manifest
 
     def check_rights(self, video_id: str) -> RightsManifest:
         """

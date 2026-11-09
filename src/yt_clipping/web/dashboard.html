@@ -3522,12 +3522,28 @@
         .replace(/'/g, '&#39;');
     }
 
-    function showToast(msg) {
+    let toastTimeout = null;
+    function showToast(msg, type = 'info') {
       if (typeof SoundFX !== 'undefined') SoundFX.playClick();
       const toast = document.getElementById('toast');
-      document.getElementById('toastMsg').innerText = msg;
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 2500);
+      const toastMsg = document.getElementById('toastMsg');
+      const toastIcon = toast ? toast.querySelector('.toast-icon') : null;
+      if (toastMsg) toastMsg.innerText = msg;
+      if (toast) {
+        if (type === 'error') {
+          toast.style.borderColor = 'var(--rose)';
+          if (toastIcon) toastIcon.style.color = 'var(--rose)';
+        } else if (type === 'warning') {
+          toast.style.borderColor = 'var(--amber)';
+          if (toastIcon) toastIcon.style.color = 'var(--amber)';
+        } else {
+          toast.style.borderColor = 'var(--emerald)';
+          if (toastIcon) toastIcon.style.color = 'var(--emerald)';
+        }
+        toast.classList.add('show');
+        if (toastTimeout) clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => toast.classList.remove('show'), type === 'error' ? 5500 : 3000);
+      }
     }
 
     function switchView(viewName) {
@@ -3658,7 +3674,13 @@ Storage Base Path:    ${data.storage.data_dir}
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ video_id_or_url: url })
         });
-        const data = await res.json();
+        let data;
+        const text = await res.text();
+        try {
+          data = JSON.parse(text);
+        } catch (_) {
+          data = { detail: text || `Server error (${res.status})` };
+        }
         if (!res.ok) throw new Error(data.detail || 'Failed to analyze video');
 
         // Complete analysis animation
@@ -3715,7 +3737,7 @@ Storage Base Path:    ${data.storage.data_dir}
         btnPreview.disabled = false;
         btnPreview.style.opacity = '1';
         btnPreviewText.innerText = 'Discover & Explain Moments';
-        alert('Analysis Error: ' + e.message);
+        showToast(e.message || 'Analysis error', 'error');
       }
     }
 
