@@ -1,0 +1,205 @@
+# =============================================================================
+# VBL Law Chambers — PRODUCTION stack (self-hosted)
+#
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# ⚠️  COST NOTE
+# This file targets a server you control. It is free to RUN (all images are
+# free), but it needs a host. A genuinely free option is Oracle Cloud's
+# "Always Free" ARM VM (4 vCPU / 24 GB) — ample for this whole stack.
+# If you deploy on Render instead, use the render.yaml at the repository root and ignore this file.
+#
+# WHAT THIS DOES NOT INCLUDE, deliberately:
+#   * Postiz + Temporal + Elasticsearch. Measured at ~2.34 GB and Temporal
+#     requires a disk; publishing is done natively by publishing/*.js instead.
+#   * A database container for the portal. State lives in Supabase (free tier).
+#
+# Secrets come from automation/.env, which is gitignored. Nothing here carries
+# a default credential: every secret uses the ${VAR:?message} form so the stack
+# refuses to start rather than silently booting with a known password.
+# =============================================================================
+
+name: vbl-chambers-prod
+
+services:
+  # ---------------------------------------------------------------------------
+  # Chambers portal — Express API + both React bundles on :3300
+  # ---------------------------------------------------------------------------
+  web-portal:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: vbl-web-portal
+    restart: unless-stopped
+    # The heap cap is baked into the image CMD; repeated here so it survives
+    # anyone overriding the command.
+    command: ["node", "--max-old-space-size=400", "server.js"]
+    ports:
+      - "127.0.0.1:3300:3300"   # bound to loopback: the proxy is the only way in
+    environment:
+      NODE_ENV: production
+      WEB_PORT: 3300
+      TZ: Asia/Kolkata
+
+      # --- Role-separated access keys (see server.js requireRole) ------------
+      CHAMBERS_ADMIN_SECRET_KEY: ${CHAMBERS_ADMIN_SECRET_KEY:?set CHAMBERS_ADMIN_SECRET_KEY in automation/.env}
+      AUTOMATION_SECRET_KEY: ${AUTOMATION_SECRET_KEY:?set AUTOMATION_SECRET_KEY in automation/.env}
+
+      # --- Persistence -------------------------------------------------------
+      SUPABASE_URL: ${SUPABASE_URL:?set SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?set SUPABASE_SERVICE_ROLE_KEY}
+
+      # --- Workflow hub ------------------------------------------------------
+      # Internal DNS first (no public hop, no TLS handshake); the public URL is
+      # the fallback used when the portal runs outside this network.
+      N8N_INTERNAL_URL: http://n8n:5678
+      N8N_PUBLIC_URL: ${N8N_PUBLIC_URL:-https://n8n.vbllawchambers.com}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:?set N8N_WEBHOOK_SECRET}
+
+      # --- Google Drive vault ------------------------------------------------
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:?set GOOGLE_DRIVE_FOLDER_ID}
+
+      # --- Social channels (absent ones simply report NEEDS_CONFIGURATION) ---
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v21.0}
+      FACEBOOK_PAGE_ID: ${FACEBOOK_PAGE_ID:-}
+      FACEBOOK_PAGE_ACCESS_TOKEN: ${FACEBOOK_PAGE_ACCESS_TOKEN:-}
+      FACEBOOK_PAGE_NAME: ${FACEBOOK_PAGE_NAME:-}
+      INSTAGRAM_BUSINESS_ACCOUNT_ID: ${INSTAGRAM_BUSINESS_ACCOUNT_ID:-}
+      INSTAGRAM_USERNAME: ${INSTAGRAM_USERNAME:-}
+      THREADS_USER_ID: ${THREADS_USER_ID:-}
+      THREADS_ACCESS_TOKEN: ${THREADS_ACCESS_TOKEN:-}
+      LINKEDIN_ACCESS_TOKEN: ${LINKEDIN_ACCESS_TOKEN:-}
+      LINKEDIN_AUTHOR_URN: ${LINKEDIN_AUTHOR_URN:-}
+      LINKEDIN_DISPLAY_NAME: ${LINKEDIN_DISPLAY_NAME:-}
+      PINTEREST_ACCESS_TOKEN: ${PINTEREST_ACCESS_TOKEN:-}
+      PINTEREST_BOARD_ID: ${PINTEREST_BOARD_ID:-}
+      PINTEREST_BOARD_NAME: ${PINTEREST_BOARD_NAME:-}
+
+      CORS_EXTRA_ORIGINS: ${CORS_EXTRA_ORIGINS:-}
+    volumes:
+      # Client documents staged on disk before they reach the Drive vault.
+      # Named volume, not a bind: survives rebuilds, not tied to a host path.
+      - portal-uploads:/app/uploads
+      - portal-data:/app/data
+    depends_on:
+      n8n:
+        condition: service_started
+    healthcheck:
+      # ?shallow=1: a liveness probe must not depend on Supabase being up, or a
+      # third party's outage marks this container unhealthy.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3300/api/health?shallow=1').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    mem_limit: 512m          # mirrors the Render free tier so local == prod
+
+  # ---------------------------------------------------------------------------
+  # n8n — workflow hub. Holds the Google Drive / YouTube OAuth credentials.
+  # ---------------------------------------------------------------------------
+  n8n:
+    # Pinned, like every other n8n reference in this repo. `latest` can roll in
+    # a release whose database migration is one-way, on a stack whose Postgres
+    # holds the credentials for the whole practice. Same release as render.yaml.
+    # Like the dev compose file, this uses the PRODUCTION schema - never run it
+    # alongside the Render n8n service (duplicate schedule executions).
+    image: n8nio/n8n:2.40.5
+    container_name: vbl-n8n
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"   # loopback only; reached via the proxy
+    environment:
+      TZ: Asia/Kolkata
+      GENERIC_TIMEZONE: Asia/Kolkata
+
+      # --- UI protection -----------------------------------------------------
+      # The editor holds live Google Drive, YouTube and Meta credentials.
+      #
+      # This block used to set N8N_BASIC_AUTH_ACTIVE/USER/PASSWORD with the
+      # `:?` required form. Two things were wrong with that: n8n 1.x REMOVED
+      # basic auth entirely, so the variables did nothing; and because they
+      # were required, the stack refused to start until you supplied
+      # credentials that had no effect. The comment claimed the editor was
+      # "never open" while it was in fact protected by nothing.
+      #
+      # 1.x and 2.x use built-in user management (always on; the old
+      # N8N_USER_MANAGEMENT_DISABLED switch no longer exists in 2.x). On a
+      # fresh schema n8n shows an owner setup screen and WHOEVER REACHES IT
+      # FIRST BECOMES OWNER, so complete that immediately after `up`, before
+      # the proxy is reachable publicly.
+      # The unauthenticated public REST API is never exposed.
+      N8N_PUBLIC_API_DISABLED: "true"
+
+      # --- Credential encryption ---------------------------------------------
+      # Encrypts every stored OAuth credential. If n8n generates this itself it
+      # lands only in the local volume, and losing that makes every credential
+      # in Supabase permanently unreadable. Pin it explicitly and back it up:
+      # once the database moved to Supabase, this key became the ONLY thing
+      # that is not backed up along with it.
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in automation/.env}
+
+      # --- Persistence: the chambers Supabase Postgres ------------------------
+      # This block was absent, so n8n silently fell back to SQLite inside
+      # n8n-data. That meant this stack and the Render one kept SEPARATE
+      # workflow and credential stores: a credential reconnected in one did not
+      # exist in the other, and nothing said so.
+      #
+      # Session pooler (5432), not the direct host and not 6543 — see
+      # automation/supabase/n8n-schema.sql and .env.example for why.
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: ${SUPABASE_DB_HOST:?set SUPABASE_DB_HOST (Supabase -> Connect -> Session pooler)}
+      DB_POSTGRESDB_PORT: ${SUPABASE_DB_PORT:-5432}
+      DB_POSTGRESDB_DATABASE: ${SUPABASE_DB_NAME:-postgres}
+      DB_POSTGRESDB_USER: ${SUPABASE_DB_USER:?set SUPABASE_DB_USER, e.g. postgres.<project-ref>}
+      DB_POSTGRESDB_PASSWORD: ${SUPABASE_DB_PASSWORD:?set SUPABASE_DB_PASSWORD (Settings -> Database, NOT the service-role key)}
+      DB_POSTGRESDB_SCHEMA: ${SUPABASE_DB_SCHEMA:-n8n}
+      # Encrypted and verified against Supabase's public root CA - see the TLS
+      # block in render.yaml for why neither "false" nor a bare "true" did that.
+      DB_POSTGRESDB_SSL_ENABLED: "true"
+      DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED: "true"
+      DB_POSTGRESDB_SSL_CA_FILE: /opt/supabase/supabase-root-2021-ca.crt
+      # Pool and health-check timing: see render.yaml's pool block.
+      DB_POSTGRESDB_POOL_SIZE: ${SUPABASE_DB_POOL_SIZE:-4}
+      DB_POSTGRESDB_CONNECTION_TIMEOUT: "30000"
+      DB_PING_TIMEOUT_MS: "30000"
+
+      # Execution history lands in the same 500MB free tier as the legal tables.
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: ${N8N_EXECUTIONS_MAX_AGE_HOURS:-168}
+      EXECUTIONS_DATA_PRUNE_MAX_COUNT: ${N8N_EXECUTIONS_MAX_COUNT:-2000}
+
+      # --- Public addressing -------------------------------------------------
+      # N8N_WEBHOOK_URL (WEBHOOK_URL is deprecated in 2.x) must be the PUBLIC
+      # https address or n8n hands Google and Meta a localhost callback, and
+      # OAuth silently fails at the redirect.
+      N8N_HOST: ${N8N_HOST:-n8n.vbllawchambers.com}
+      N8N_PROTOCOL: https
+      N8N_PORT: 5678
+      N8N_WEBHOOK_URL: ${N8N_PUBLIC_URL:-https://n8n.vbllawchambers.com}
+      N8N_EDITOR_BASE_URL: ${N8N_PUBLIC_URL:-https://n8n.vbllawchambers.com}
+      # Behind a reverse proxy n8n must trust the forwarded headers.
+      N8N_PROXY_HOPS: 1
+
+      # Large media is written to disk instead of being held in memory —
+      # the same reasoning as the portal's upload path.
+      N8N_DEFAULT_BINARY_DATA_MODE: filesystem
+      N8N_FORMDATA_FILE_SIZE_MAX: 500
+
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      # Same module trim and runner cap as render.yaml (reasoning there).
+      N8N_DISABLED_MODULES: insights,external-secrets,community-packages,provisioning,breaking-changes,source-control,dynamic-credentials,chat-hub,sso-oidc,sso-saml,log-streaming,ldap,workflow-builder,instance-registry,otel,workflow-reviews,instance-ai
+      N8N_RUNNERS_MAX_OLD_SPACE_SIZE: "96"
+      N8N_RUNNERS_GRANT_TOKEN_TTL: "120"
+    volumes:
+      # Workflows, credentials and executions now live in Supabase, so this
+      # volume no longer holds the things that hurt to lose. It keeps local
+      # config and binary-mode staging only.
+      - n8n-data:/home/node/.n8n
+      - ./supabase/supabase-root-2021-ca.crt:/opt/supabase/supabase-root-2021-ca.crt:ro
+    mem_limit: 768m
+
+volumes:
+  n8n-data:
+  portal-uploads:
+  portal-data:

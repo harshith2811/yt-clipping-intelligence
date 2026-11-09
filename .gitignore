@@ -139,3 +139,10 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# --- Dedicated YouTube OAuth & Credential Vault ---
+data/credentials/
+*.credentials.json
+omnipost/web/node_modules/
+omnipost/web/uploads/
+omnipost/web/data/*.json

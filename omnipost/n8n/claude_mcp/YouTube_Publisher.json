@@ -1,0 +1,249 @@
+{
+  "id": "mvAa3hiDPutYTHkj",
+  "name": "YouTube Publisher",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 5 }] } },
+      "id": "49ae7d07-60c2-48a8-81c2-7099d4185615",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [-900, 0]
+    },
+    {
+      "parameters": {},
+      "id": "30e2a796-92f0-4280-af3f-c52c1cd0944a",
+      "name": "Manual Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-900, 200]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": { "__rl": true, "mode": "id", "value": "14NFIyGUMg4hcTZ3hTIZklayVYstvxvpOesesgpEF72M", "cachedResultName": "Content Calendar" },
+        "sheetName": { "__rl": true, "mode": "name", "value": "Untitled" },
+        "options": {}
+      },
+      "id": "57f185e4-e3a6-494e-b1d2-6668694869f5",
+      "name": "Read Content Calendar",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [-680, 100],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "leftValue": "={{ ['approved','retry pending'].includes(String($json.Status || '').toLowerCase().trim()) && String($json.Platforms || '').toLowerCase().includes('youtube') && !String($json['YouTube Status'] || '').toLowerCase().startsWith('posted') && String($json['Drive File ID'] || '').trim() !== '' && ($json['Scheduled DateTime'] ? DateTime.fromISO(String($json['Scheduled DateTime'])) <= DateTime.now() : true) }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4855842-88e7-4e43-a2a3-f141e1eb45db",
+      "name": "Due YouTube Rows",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [-460, 100]
+    },
+    {
+      "parameters": { "batchSize": 1, "options": { "reset": false } },
+      "id": "c5e2bfbc-f8be-4bde-87e5-b953beaf6d6e",
+      "name": "Loop Over Rows",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-240, 100]
+    },
+    {
+      "parameters": {},
+      "id": "56c957b7-becd-4a79-b4f4-6e9c1399d08d",
+      "name": "All Rows Processed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1120, -60]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "={{ $json['Drive File ID'] }}" },
+        "options": { "binaryPropertyName": "data" }
+      },
+      "id": "dc9d7e8c-66d5-4131-a10d-b514ecda6b74",
+      "name": "Download Video from Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-20, 200],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ ($('Loop Over Rows').item.json.Title || 'Untitled').toString().slice(0, 100) }}",
+        "regionCode": "IN",
+        "categoryId": "27",
+        "binaryProperty": "data",
+        "options": {
+          "description": "={{ ($('Loop Over Rows').item.json.Caption || '').toString().slice(0, 5000) }}",
+          "privacyStatus": "public",
+          "notifySubscribers": true,
+          "selfDeclaredMadeForKids": false
+        }
+      },
+      "id": "70397962-35e4-41f7-88ca-062c8b5d0c9f",
+      "name": "Upload to YouTube",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [200, 140],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Success path: YouTube accepted the upload.\nconst row = $('Loop Over Rows').item.json;\nconst uploaded = $input.first().json;\n\n// The YouTube node returns { uploadId }; older builds returned the raw resource.\nconst videoId = uploaded.uploadId || uploaded.id?.videoId || uploaded.id || '';\nconst url = videoId ? `https://www.youtube.com/watch?v=${videoId}` : '';\n\nconst requested = String(row.Platforms || '')\n  .toLowerCase()\n  .split(',')\n  .map((p) => p.trim())\n  .filter(Boolean);\n\nconst platformCols = {\n  instagram: 'Instagram Status',\n  facebook: 'Facebook Status',\n  youtube: 'YouTube Status',\n  linkedin: 'LinkedIn Status',\n  pinterest: 'Pinterest Status',\n  threads: 'Threads Status',\n};\n\nconst statuses = {};\nfor (const [key, col] of Object.entries(platformCols)) {\n  statuses[col] = key === 'youtube' ? (url ? `Posted: ${url}` : 'Posted') : row[col] || '';\n}\n\n// The row is only fully Posted once every platform it targets has succeeded;\n// otherwise it stays Approved so the other publishers can still pick it up.\nconst allDone =\n  requested.length > 0 &&\n  requested.every((p) => String(statuses[platformCols[p]] || '').toLowerCase().startsWith('posted'));\n\nreturn [\n  {\n    json: {\n      'Content ID': row['Content ID'],\n      Status: allDone ? 'Posted' : 'Approved',\n      'Retry Count': row['Retry Count'] || 0,\n      'Posted At': allDone ? new Date().toISOString() : row['Posted At'] || '',\n      Error: '',\n      ...statuses,\n      _failed: false,\n    },\n  },\n];"
+      },
+      "id": "f2ea8baf-71ce-43df-9847-ab3d4b44cdc2",
+      "name": "Build Success Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 40]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Failure path: Drive download or YouTube upload threw.\nconst MAX_RETRIES = 3;\nconst row = $('Loop Over Rows').item.json;\nconst err = $input.first().json;\n\nconst reason =\n  err?.error?.message ||\n  err?.message ||\n  err?.error ||\n  'Upload failed (no error detail returned)';\n\nconst retryCount = Number(row['Retry Count'] || 0) + 1;\nconst giveUp = retryCount >= MAX_RETRIES;\n\n// Back off further on each attempt so a transient Google outage isn't\n// hammered every 5 minutes.\nconst nextAttempt = new Date(Date.now() + 15 * retryCount * 60000).toISOString();\n\nconst platformCols = {\n  instagram: 'Instagram Status',\n  facebook: 'Facebook Status',\n  youtube: 'YouTube Status',\n  linkedin: 'LinkedIn Status',\n  pinterest: 'Pinterest Status',\n  threads: 'Threads Status',\n};\n\nconst statuses = {};\nfor (const [key, col] of Object.entries(platformCols)) {\n  statuses[col] = key === 'youtube' ? `Failed: ${String(reason).slice(0, 180)}` : row[col] || '';\n}\n\nreturn [\n  {\n    json: {\n      'Content ID': row['Content ID'],\n      Status: giveUp ? 'Failed' : 'Retry Pending',\n      'Retry Count': retryCount,\n      'Posted At': row['Posted At'] || '',\n      'Scheduled DateTime': giveUp ? row['Scheduled DateTime'] : nextAttempt,\n      Error: `YouTube: ${String(reason).slice(0, 400)}`,\n      ...statuses,\n      _failed: true,\n      _giveUp: giveUp,\n    },\n  },\n];"
+      },
+      "id": "46799530-c06a-421e-a5e7-8c53596401f2",
+      "name": "Build Failure Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 280]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "update",
+        "documentId": { "__rl": true, "mode": "id", "value": "14NFIyGUMg4hcTZ3hTIZklayVYstvxvpOesesgpEF72M", "cachedResultName": "Content Calendar" },
+        "sheetName": { "__rl": true, "mode": "name", "value": "Untitled" },
+        "columns": { "mappingMode": "autoMapInputData", "value": {}, "matchingColumns": ["Content ID"] },
+        "options": { "cellFormat": "RAW", "handlingExtraData": "ignoreIt" }
+      },
+      "id": "3ba251f3-a043-42fe-9985-a015eff44259",
+      "name": "Update Sheet Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [660, 140],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "leftValue": "={{ $json._failed === true && $json._giveUp === true }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "376c46df-e6ea-493b-8910-d489b0cd03ce",
+      "name": "Exhausted Retries?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [880, 280]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "vbllawchambers@gmail.com",
+        "subject": "={{ 'YouTube publishing failed - ' + $json['Content ID'] }}",
+        "emailType": "text",
+        "message": "={{ 'Content ID: ' + $json['Content ID'] + '\\nStatus: ' + $json.Status + '\\nRetry Count: ' + $json['Retry Count'] + '\\n\\nError:\\n' + $json.Error + '\\n\\nThis row has exhausted its retries and will not be attempted again.\\nFix the issue, then set Status back to \"Approved\" in the Content Calendar to retry.' }}",
+        "options": {}
+      },
+      "id": "f8912e0a-46d7-4305-b66d-e1c8d1185408",
+      "name": "Alert Admin",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [1120, 280],
+      "onError": "continueRegularOutput",
+      "webhookId": "384c7818-da72-4e98-b2db-dd8367d0cf9b"
+    },
+    {
+      "parameters": {
+        "content": "## YouTube Publisher\n\nPublishes Content Calendar rows to YouTube every 5 minutes.\n\n**Picks up a row when ALL are true:** Status is Approved or Retry Pending; Platforms contains youtube; YouTube Status does not start with Posted; Drive File ID is set; Scheduled DateTime has passed (or is empty).\n\nOnly owns the YouTube Status column. Retries up to 3 times (15/30/45 min back-off), then marks the row Failed and emails the admin.\n\n**Upload settings:** category 27 (Education), region IN, privacy PUBLIC, subscribers notified. Set privacyStatus to private on \"Upload to YouTube\" while testing.\n\nImported INACTIVE. Publishing it posts real videos to the chambers channel.",
+        "color": 4
+      },
+      "id": "a7e9ee6e-f70b-403b-8cbd-3b4daea90f34",
+      "name": "Sticky Note f774c62f",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-900, 420]
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": { "main": [[{ "node": "Read Content Calendar", "type": "main", "index": 0 }]] },
+    "Manual Test": { "main": [[{ "node": "Read Content Calendar", "type": "main", "index": 0 }]] },
+    "Read Content Calendar": { "main": [[{ "node": "Due YouTube Rows", "type": "main", "index": 0 }]] },
+    "Due YouTube Rows": { "main": [[{ "node": "Loop Over Rows", "type": "main", "index": 0 }]] },
+    "Loop Over Rows": {
+      "main": [
+        [{ "node": "All Rows Processed", "type": "main", "index": 0 }],
+        [{ "node": "Download Video from Drive", "type": "main", "index": 0 }]
+      ]
+    },
+    "Download Video from Drive": {
+      "main": [
+        [{ "node": "Upload to YouTube", "type": "main", "index": 0 }],
+        [{ "node": "Build Failure Update", "type": "main", "index": 0 }]
+      ]
+    },
+    "Upload to YouTube": {
+      "main": [
+        [{ "node": "Build Success Update", "type": "main", "index": 0 }],
+        [{ "node": "Build Failure Update", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Success Update": { "main": [[{ "node": "Update Sheet Row", "type": "main", "index": 0 }]] },
+    "Build Failure Update": {
+      "main": [
+        [
+          { "node": "Update Sheet Row", "type": "main", "index": 0 },
+          { "node": "Exhausted Retries?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Update Sheet Row": { "main": [[{ "node": "Loop Over Rows", "type": "main", "index": 0 }]] },
+    "Exhausted Retries?": { "main": [[{ "node": "Alert Admin", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

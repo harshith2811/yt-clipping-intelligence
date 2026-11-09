@@ -1,0 +1,127 @@
+# =============================================================================
+# Chambers publishing heartbeat — the free replacement for Render Cron Jobs.
+#
+# WHY THIS EXISTS
+#   * Render Cron Jobs are a PAID feature.
+#   * Render free web services sleep after ~15 minutes idle and take ~50s to
+#     wake. A scheduled post whose moment arrives while the container is asleep
+#     would simply never be published, because nothing would ask it to.
+#
+#   GitHub Actions schedules are free (2,000 minutes/month on the Free plan).
+#   Each run here takes well under a minute, so four runs a day costs roughly
+#   an hour a month.
+#
+# WHAT IT DOES
+#   1. Wakes the portal and n8n with a cheap request.
+#   2. Asks the portal to advance every in-flight publish one step.
+#
+#   Step 2 is safe to run at any time and as often as you like: publishing
+#   state lives in Supabase and every platform is checked for an existing post
+#   before anything is sent, so a tick can never produce a duplicate.
+#
+# SETUP  (Settings -> Secrets and variables -> Actions)
+#   Secrets:   AUTOMATION_SECRET_KEY   the publishing passkey (NOT the chambers one)
+#   Variables: PORTAL_URL              https://admin.vbllawchambers.com
+#              N8N_URL                 https://n8n.vbllawchambers.com
+#
+#   The chambers key must never be placed here. This workflow only needs the
+#   automation role, and a key in CI is a key with a wider blast radius.
+#
+# NOTE: GitHub disables scheduled workflows in a repository with no activity
+# for 60 days. It emails first; re-enable from the Actions tab.
+# =============================================================================
+
+name: Publishing heartbeat
+
+# THE SCHEDULE IS PAUSED, and currently redundant.
+#
+# It was paused while neither Render service existed. As of 2026-09-23 the
+# portal is live (advocate-content-portal.onrender.com and
+# admin.vbllawchambers.com answer 200); n8n is deployed but had no live deploy
+# until the memory fix that accompanies this note.
+#
+# keep-alive.yml now runs the same "advance in-flight publishes" tick on every
+# run whenever the AUTOMATION_SECRET_KEY secret is set, so enabling this too
+# would only double the calls. It stays as the manual (workflow_dispatch)
+# heartbeat, and as the schedule to restore if keep-alive.yml is reduced to
+# fit the free-tier budgets described at the top of that file. It still needs
+# the PORTAL_URL variable and AUTOMATION_SECRET_KEY secret - neither was set
+# on 2026-09-23.
+on:
+  # schedule:
+  #   # 06:00, 10:00, 14:00 and 18:00 IST (cron is UTC; IST = UTC+5:30).
+  #   - cron: '30 0,4,8,12 * * *'
+  workflow_dispatch:        # lets you run it by hand from the Actions tab
+
+concurrency:
+  # Never let two ticks overlap. The state machine is idempotent, but
+  # overlapping runs would just waste free minutes racing each other.
+  group: publishing-heartbeat
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check configuration
+        env:
+          PORTAL_URL: ${{ vars.PORTAL_URL }}
+        run: |
+          if [ -z "$PORTAL_URL" ]; then
+            echo "::error::PORTAL_URL repository variable is not set."
+            exit 1
+          fi
+          echo "Portal: $PORTAL_URL"
+
+      - name: Wake the services
+        env:
+          PORTAL_URL: ${{ vars.PORTAL_URL }}
+          N8N_URL: ${{ vars.N8N_URL }}
+        run: |
+          # A free instance can take ~50s to cold start, so allow for it.
+          # --max-time covers the whole wake; failure here is not fatal, the
+          # tick below retries anyway.
+          echo "Waking portal..."
+          curl -sS -o /dev/null -w '  portal  HTTP %{http_code} in %{time_total}s\n' \
+               --max-time 90 --retry 2 --retry-delay 10 \
+               "$PORTAL_URL/api/health?shallow=1" || echo "  portal did not answer"
+
+          if [ -n "$N8N_URL" ]; then
+            echo "Waking n8n..."
+            # n8n gates YouTube publishing and the Drive lockers. Any status is
+            # fine - a 401 from the editor still means the container is awake.
+            curl -sS -o /dev/null -w '  n8n     HTTP %{http_code} in %{time_total}s\n' \
+                 --max-time 90 --retry 2 --retry-delay 10 \
+                 "$N8N_URL/healthz" || echo "  n8n did not answer"
+          fi
+
+      - name: Advance in-flight publishes
+        env:
+          PORTAL_URL: ${{ vars.PORTAL_URL }}
+          AUTOMATION_SECRET_KEY: ${{ secrets.AUTOMATION_SECRET_KEY }}
+        run: |
+          if [ -z "$AUTOMATION_SECRET_KEY" ]; then
+            echo "::error::AUTOMATION_SECRET_KEY secret is not set."
+            exit 1
+          fi
+
+          # x-admin-key avoids base64-encoding the key into a log-visible header.
+          RESPONSE=$(mktemp)
+          CODE=$(curl -sS -o "$RESPONSE" -w '%{http_code}' \
+                  --max-time 120 \
+                  -X POST \
+                  -H "x-admin-key: $AUTOMATION_SECRET_KEY" \
+                  -H 'Content-Type: application/json' \
+                  "$PORTAL_URL/api/publish/tick")
+
+          echo "  /api/publish/tick -> HTTP $CODE"
+          # The body reports which entries advanced; it contains no credentials.
+          cat "$RESPONSE"; echo
+
+          case "$CODE" in
+            200) echo "::notice::Publishing tick completed." ;;
+            401|403) echo "::error::Rejected ($CODE) — AUTOMATION_SECRET_KEY is wrong or lacks the automation role."; exit 1 ;;
+            *)   echo "::error::Tick failed with HTTP $CODE"; exit 1 ;;
+          esac

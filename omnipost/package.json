@@ -1,0 +1,14 @@
+{
+  "name": "omnipost",
+  "version": "1.0.0",
+  "description": "Universal Multi-Platform Social Media Publishing & Video Automation Engine",
+  "type": "module",
+  "scripts": {
+    "setup": "node scripts/setup-wizard.js",
+    "dev": "npm --prefix web run dev",
+    "start": "npm --prefix web start",
+    "build": "npm --prefix web run build",
+    "test": "npm --prefix web test",
+    "verify": "npm --prefix web run verify"
+  }
+}

@@ -282,15 +282,14 @@ class ProjectStore:
                     data = json.load(f)
                 record = ClipSidecarRecord.from_dict(data)
                 # Check media existence on disk
-                if not os.path.exists(record.file_path) or os.path.getsize(record.file_path) < 1024:
+                if not os.path.exists(record.file_path) or os.path.getsize(record.file_path) == 0:
                     # Check if present in rendered_clips_dir
                     alt_path = os.path.join(self.rendered_clips_dir, os.path.basename(record.file_path))
-                    if os.path.exists(alt_path) and os.path.getsize(alt_path) >= 1024:
+                    if os.path.exists(alt_path) and os.path.getsize(alt_path) > 0:
                         record.file_path = alt_path
                     else:
                         record.status = "MISSING_MEDIA"
-                if record.status != "MISSING_MEDIA":
-                    seen_clips[record.clip_id] = record
+                seen_clips[record.clip_id] = record
             except Exception as e:
                 logger.warning(f"Error reading sidecar {s_file}: {e}")
 

@@ -1,0 +1,104 @@
+name: Render 24/7 Keep-Alive
+
+# =============================================================================
+# READ BEFORE RELYING ON THIS - it cannot deliver 24/7 on free tiers.
+#
+# Pings reset Render's 15-minute idle timer; they do not add capacity. Two free
+# budgets make "both services always awake" impossible, measured against the
+# numbers each platform publishes:
+#
+#   Render:  750 free instance hours per WORKSPACE per month. A service kept
+#            awake all month uses ~720-744 of them. Two services kept awake
+#            need ~1,440-1,488 - the budget runs out around day 15, and
+#            Render then suspends ALL free services in the workspace until the
+#            1st. That is a longer outage than any cold start.
+#
+#   GitHub:  '*/14 * * * *' fires at :00 :14 :28 :42 :56 - five runs an hour,
+#            ~3,600 a month. Each run bills at least one minute, and this is a
+#            private repository on a Free personal account: 2,000 minutes a
+#            month. When they run out, EVERY workflow in the repo stops until
+#            the next cycle (with the default $0 spending limit nothing is
+#            charged - it simply stops).
+#
+#   Also:    GitHub delays scheduled runs under load. On 2026-09-23 the gaps
+#            between runs were 11-21 minutes, so a service can still sleep
+#            between two "every 14 minutes" pings.
+#
+# The schedule is left as configured because which service stays awake, and
+# when, is an operating decision - see the audit notes for options that fit
+# both budgets.
+# =============================================================================
+
+on:
+  # Paused: UptimeRobot now handles 24/7 pings to admin.vbllawchambers.com
+  # schedule:
+  #   - cron: '*/14 * * * *'
+  workflow_dispatch: # Allows manual trigger anytime from the Actions tab
+
+# Pings need no repository access at all.
+permissions: {}
+
+concurrency:
+  group: render-keepalive
+  cancel-in-progress: true
+
+jobs:
+  keepalive:
+    name: Ping Services
+    runs-on: ubuntu-latest
+    # Worst case per ping: 2 attempts x 60s + 5s delay. The old 3-minute limit
+    # was shorter than the job's own retry budget.
+    timeout-minutes: 6
+    env:
+      # Repository variables reach the script as environment variables, never
+      # spliced into its source: a ${{ }} expression inside `run:` is pasted in
+      # before bash parses it.
+      PORTAL_URL: ${{ vars.PORTAL_URL || 'https://advocate-content-portal.onrender.com' }}
+      N8N_URL: ${{ vars.N8N_URL || 'https://n8n-automation-p7cc.onrender.com' }}
+
+    steps:
+      - name: Ping Advocate Content Portal
+        run: |
+          # Body goes to a real file: with `-o /dev/null`, a retry makes curl
+          # try to truncate /dev/null, which fails with exit 23 - and the
+          # step's `bash -e` then failed the whole run on any 502/503, i.e. on
+          # exactly the cold starts this workflow exists for.
+          CODE=$(curl -s -o "$RUNNER_TEMP/portal.out" -w '%{http_code}' \
+                  --max-time 60 --retry 1 --retry-delay 5 \
+                  "$PORTAL_URL/api/health?shallow=1") || CODE=000
+          echo "Portal ($PORTAL_URL) -> HTTP $CODE"
+          if [ "$CODE" -ge 200 ] && [ "$CODE" -lt 400 ]; then
+            echo "::notice::Portal is awake and healthy."
+          else
+            echo "::warning::Portal responded with HTTP $CODE"
+          fi
+
+      - name: Ping n8n Automation Engine
+        run: |
+          CODE=$(curl -s -o "$RUNNER_TEMP/n8n.out" -w '%{http_code}' \
+                  --max-time 60 --retry 1 --retry-delay 5 \
+                  "$N8N_URL/healthz") || CODE=000
+          echo "n8n ($N8N_URL) -> HTTP $CODE"
+          if [ "$CODE" -ge 200 ] && [ "$CODE" -lt 400 ]; then
+            echo "::notice::n8n is awake and healthy."
+          else
+            echo "::warning::n8n responded with HTTP $CODE"
+          fi
+
+      - name: Advance Scheduled Social Posts (Idempotent)
+        env:
+          AUTOMATION_SECRET_KEY: ${{ secrets.AUTOMATION_SECRET_KEY }}
+        run: |
+          # If the secret is set, advance in-flight posts; otherwise skip quietly.
+          if [ -n "$AUTOMATION_SECRET_KEY" ]; then
+            echo "Triggering publishing engine tick..."
+            TICK_CODE=$(curl -s -o "$RUNNER_TEMP/tick.out" -w '%{http_code}' \
+                         -X POST \
+                         -H "x-admin-key: $AUTOMATION_SECRET_KEY" \
+                         -H "Content-Type: application/json" \
+                         --max-time 60 \
+                         "$PORTAL_URL/api/publish/tick") || TICK_CODE=000
+            echo "Publishing tick -> HTTP $TICK_CODE"
+          else
+            echo "AUTOMATION_SECRET_KEY not configured in GitHub Secrets; skipping publish tick."
+          fi

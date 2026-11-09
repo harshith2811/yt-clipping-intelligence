@@ -1,0 +1,528 @@
+# =============================================================================
+# VBL Law Chambers — Render Blueprint (Free Tier, $0/month)
+#
+# Deploy:  Render Dashboard -> New -> Blueprint -> point at this repo
+#          (Render reads this file; set the secret env vars in the dashboard.)
+#
+# ── FREE TIER CONSTRAINTS THIS FILE IS BUILT AROUND ────────────────────────
+#   * 512 MB RAM per service          -> no Postiz (measured at 2.34 GB)
+#   * NO persistent disks             -> n8n must use external Postgres,
+#                                        NOT its default SQLite
+#   * Services sleep after ~15 min    -> ~50 s cold start on first request
+#     idle, wake on HTTP request         (fine: a post landing a minute late
+#                                        does not matter)
+#   * 750 free instance hours per     -> a service kept awake 24/7 uses ~744
+#     WORKSPACE per month; when they     of them, so two always-on services
+#     run out Render suspends ALL        (~1,488 h) exhaust the budget around
+#     free services until the 1st        day 15 and both go down until the
+#                                        1st. See .github/workflows/keep-alive.yml
+#   * 2 custom domains per workspace  -> admin. (portal) + n8n. (n8n). The
+#                                        retired automation. subdomain is NOT
+#                                        mapped; its DNS record should go.
+#   * Render Cron Jobs are PAID       -> schedule externally instead, see
+#                                        .github/workflows/publish-cron.yml
+#   * Render's own free Postgres
+#     EXPIRES after ~30 days          -> n8n uses the chambers Supabase
+#                                        project instead, in its own `n8n`
+#                                        schema. One database, no expiry.
+#
+# ── WHY NO POSTIZ ─────────────────────────────────────────────────────────
+#   Postiz routes every publish through Temporal (verified in its source:
+#   posts.service.ts calls startWorkflow), and Temporal requires Elasticsearch
+#   plus its own Postgres. Elasticsearch needs a disk, and disks on Render are
+#   paid + always-on. Publishing therefore happens directly from n8n instead.
+#
+# ── UPLOAD MEMORY (resolved) ──────────────────────────────────────────────
+#   Uploads stream to disk via multer.diskStorage into os.tmpdir(), and are
+#   swept on response finish. Peak heap is therefore independent of file size;
+#   the earlier multer.memoryStorage path (250 MB x 10 files = 2.5 GB of heap
+#   requested) would OOM-kill this container and is gone.
+#   Meta, Threads and Pinterest fetch media from a PUBLIC URL, so no bytes pass
+#   through Node at all for those. LinkedIn requires an upload, and streams the
+#   source response body straight into the PUT without buffering. Only YouTube
+#   moves real bytes, and that happens inside n8n, not here.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Advocate Content Portal — React dashboard + Express API on one port
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: advocate-content-portal
+    runtime: docker
+    plan: free
+    region: singapore              # closest Render region to Andhra Pradesh
+    rootDir: web
+    dockerfilePath: ./Dockerfile
+    # Shallow form: no third-party round-trip. A liveness check that depends on
+    # Supabase being reachable turns someone else's outage into a restart loop.
+    healthCheckPath: /api/health?shallow=1
+    autoDeploy: true
+    branch: main
+    # The free tier allows TWO custom domains per workspace, across all
+    # services: admin. here and n8n. below. A third (automation.) triggered
+    # Render's payment requirement and was removed. server.js still reads the
+    # Host header (HOST_SCOPES) so admin. gets the chambers defaults; the RBAC
+    # that protects the vault's API does not depend on the domain at all.
+    # See automation/deploy/DNS_AND_DOMAINS.md for the CNAME records.
+    domains:
+      - admin.vbllawchambers.com
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # The V8 heap cap lives in ONE place: the Dockerfile's CMD
+      # (--max-old-space-size=256). It used to be set here as well, as
+      # NODE_OPTIONS=400; command-line flags override NODE_OPTIONS, so this
+      # value never applied and only suggested a limit that was not in force.
+      # See the Dockerfile for why 256 and not 400 (measured).
+      # Render injects PORT and routes web traffic to this port.
+      - key: PORT
+        value: 3300
+      - key: WEB_PORT
+        value: 3300
+      - key: TZ
+        value: Asia/Kolkata
+      # Public URL of the n8n service below. Render exposes each service's URL;
+      # fill this in after the first deploy (or use fromService, see docs).
+      # `property: hostport` yields "n8n-automation:5678" with NO scheme.
+      # server.js normalises that (normaliseBase), but the value is still a
+      # bare host:port - do not concatenate it by hand anywhere else.
+      - key: N8N_INTERNAL_URL
+        fromService:
+          type: web
+          name: n8n-automation
+          property: hostport
+      # The PUBLIC address. This is the fallback used when the portal cannot
+      # reach n8n on the private network, so it must be a routable https URL -
+      # `hostport` here would produce an internal host that resolves nowhere.
+      - key: N8N_PUBLIC_URL
+        value: https://n8n-automation-p7cc.onrender.com
+      # Sent as X-VBL-Webhook-Key on every call to n8n. Must equal the value of
+      # the "VBL Portal Webhook Key" Header Auth credential in n8n, which every
+      # workflow webhook requires. Without it n8n refuses the portal (403) and
+      # submissions stay pending - with no auth, anyone who found the n8n host
+      # could file content into the publishing calendar.
+      - key: N8N_WEBHOOK_SECRET
+        sync: false
+      - key: CHAMBERS_ADMIN_SECRET_KEY
+        sync: false              # Master passkey for confidential client vault (admin.vbllawchambers.com)
+      - key: AUTOMATION_SECRET_KEY
+        sync: false              # Passkey for the social publishing suite (automation role only)
+      - key: SUPABASE_URL
+        value: https://cmjhgvhtlpayjcrsqgox.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FACEBOOK_PAGE_ID
+        value: "1323467794180143"
+      - key: FACEBOOK_PAGE_ACCESS_TOKEN
+        sync: false
+      - key: INSTAGRAM_BUSINESS_ACCOUNT_ID
+        value: "17841437075937802"
+      - key: THREADS_USER_ID
+        value: "27996006120020556"
+      - key: THREADS_ACCESS_TOKEN
+        sync: false
+      - key: GOOGLE_DRIVE_FOLDER_ID
+        value: 1SHI8YHrgHZEmVU30Jlr-FVDhqo-XZkSm
+
+      # --- Channel display names (labels only, not credentials) -------------
+      - key: META_GRAPH_VERSION
+        value: v21.0
+      - key: FACEBOOK_PAGE_NAME
+        value: VBL Law Chambers
+      - key: INSTAGRAM_USERNAME
+        value: vbllawchambers
+
+      # --- Optional channels. Absent values simply report NEEDS_CONFIGURATION
+      #     in the pre-flight; they never block the engine from arming.
+      - key: LINKEDIN_ACCESS_TOKEN
+        sync: false
+      - key: LINKEDIN_AUTHOR_URN
+        sync: false
+      - key: LINKEDIN_DISPLAY_NAME
+        value: VBL Law Chambers
+      - key: PINTEREST_ACCESS_TOKEN
+        sync: false
+      - key: PINTEREST_BOARD_ID
+        value: "1113515145309004660"
+      - key: PINTEREST_BOARD_NAME
+        value: Legal Insights & Updates
+
+      # Browser origins allowed to call this API beyond the built-in list.
+      # The Vercel-hosted site calls cross-origin, so its origin must resolve
+      # here - vbllawchambers.com is already built in.
+      - key: CORS_EXTRA_ORIGINS
+        sync: false
+
+      # Online fee payment (Razorpay). Off until the chambers' KVB current
+      # account and Razorpay merchant account are active; intake never waits on
+      # it. To switch on: set the two keys, flip this to "true", and set
+      # VITE_ENABLE_RAZORPAY=true on the Vercel website build.
+      - key: ENABLE_ONLINE_PAYMENTS
+        value: "false"
+      - key: PAYMENT_BASE_FEE_INR
+        value: "7999"
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # n8n — workflow engine. Postgres-backed because free tier has no disk.
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: n8n-automation
+    runtime: image
+    plan: free
+    region: singapore
+    autoDeploy: false
+    # NO healthCheckPath, on purpose: Render falls back to a TCP check on the
+    # port. /healthz was added on 2026-09-23 so the check meant "n8n is
+    # serving" rather than "the port is open", and on this plan it killed
+    # the service instead. On 2026-09-25, waking from sleep, n8n restarted at
+    # 05:42, 05:46 and 05:52 UTC and never became ready: at 0.1 CPU its boot
+    # (migrations, role sync, workflow activation) holds the event loop, so
+    # /healthz answered in 0.2 s one moment and not within 25 s the next,
+    # Render counted it unhealthy, answered 502 and restarted it mid-boot.
+    # A TCP connect is completed by the kernel even while the event loop is
+    # busy, so the check can no longer interrupt a slow boot. For "is n8n
+    # actually up", use GET /healthz/readiness by hand.
+    # Removing the key may not clear a value Render already holds: after the
+    # Blueprint sync, confirm Settings -> Health Check Path is empty.
+    # PINNED, not :latest. On 2026-09-23 :latest and :stable were both this
+    # exact digest (sha256:9f693fd5...), so pinning changes nothing that runs
+    # today - it stops the NEXT release from arriving unannounced. That
+    # matters more on 2.x than it did on 1.x:
+    #   * migrations are one-way, and they run against the chambers' only
+    #     Postgres;
+    #   * N8N_DISABLED_MODULES below is validated at boot - an unknown module
+    #     name is a hard startup error - and the module list changes between
+    #     releases.
+    # To upgrade: bump this, the two compose files, re-check the module names
+    # (see the comment on N8N_DISABLED_MODULES), deploy.
+    image:
+      url: docker.io/n8nio/n8n:2.40.5
+    domains:
+      - n8n.vbllawchambers.com
+    envVars:
+      # Render injects PORT and routes web traffic to this port.
+      - key: PORT
+        value: 5678
+      - key: N8N_LISTEN_ADDRESS
+        value: 0.0.0.0
+
+      # --- Persistence: the chambers Supabase Postgres -----------------------
+      # Without this n8n falls back to SQLite on an ephemeral disk and you lose
+      # every credential and workflow on each restart.
+      #
+      # This used to be a separate Neon project. Neon is gone: it was a second
+      # database, a second backup story and a second thing to keep alive, for
+      # an engine that has to reach Supabase anyway. One Postgres now.
+      #
+      # DB_POSTGRESDB_HOST is Supabase's SESSION POOLER, by its stable name.
+      #
+      # It was briefly the AWS load balancer that name CNAMEs to
+      # (pool-tcp-ap-northeast-2-...elb.amazonaws.com). Two problems with that,
+      # both verified on 2026-09-23:
+      #   * The pooler's certificate covers *.pooler.supabase.com only, so a
+      #     connection by the ELB name can never pass hostname verification -
+      #     which is what forced SSL verification off.
+      #   * The ELB is Supabase's infrastructure, not an interface they
+      #     publish; they can re-point the CNAME at any time.
+      # The stable name resolves to IPv4 (it is that same ELB underneath).
+      # The direct host db.<ref>.supabase.co is IPv6-only and unreachable
+      # from Render. Port 6543 is TRANSACTION mode and breaks n8n's TypeORM
+      # migrations (prepared statements, advisory locks). Use 5432.
+      - key: DB_TYPE
+        value: postgresdb
+      - key: DB_POSTGRESDB_HOST
+        value: aws-0-ap-northeast-2.pooler.supabase.com
+      - key: DB_POSTGRESDB_PORT
+        value: 5432             # session pooler. NOT 6543.
+      - key: DB_POSTGRESDB_DATABASE
+        value: postgres
+      - key: DB_POSTGRESDB_USER
+        value: postgres.cmjhgvhtlpayjcrsqgox
+      - key: DB_POSTGRESDB_PASSWORD
+        sync: false             # Supabase -> Settings -> Database. NOT the service-role key.
+      # Keeps n8n's ~30 internal tables - credentials_entity among them - out
+      # of `public`, where the legal tables live and PostgREST is exposed.
+      # Run automation/supabase/n8n-schema.sql ONCE before the first boot:
+      # n8n expects to find this schema and fails its first migration if it is
+      # absent.
+      - key: DB_POSTGRESDB_SCHEMA
+        value: n8n
+      # --- TLS to the database: encrypted AND verified ----------------------
+      # The pooler's chain ends at Supabase's own root, "Supabase Root 2021
+      # CA", which is not in Node's trust store (hence
+      # SELF_SIGNED_CERT_IN_CHAIN). The fix is to trust THAT root - not to
+      # switch verification off, which accepts any certificate from anyone
+      # able to sit in the path, on the connection that carries every stored
+      # OAuth credential.
+      #
+      # How n8n 2.40.5 decides (db-connection-options.js): TLS is used only if
+      # SSL_ENABLED is true, or a CA/cert/key is set, or REJECT_UNAUTHORIZED
+      # is false. So the earlier "REJECT_UNAUTHORIZED=true and nothing else"
+      # did not mean "verified" - it meant NO TLS AT ALL. Measured with n8n's
+      # own pg driver against this pooler:
+      #   REJECT=true only            -> connected, plaintext
+      #   ELB host, REJECT=false      -> TLS 1.3, authorized=false
+      #   this config                 -> TLS 1.3, authorized=true
+      #
+      # The PEM below is the PUBLIC root certificate (not a secret), identical
+      # to automation/supabase/supabase-root-2021-ca.crt. It was checked two
+      # ways: downloaded from Supabase over publicly-trusted HTTPS, and matched
+      # against the root the pooler presents -
+      #   SHA-256 80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:
+      #           82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA
+      #   expires 2031-04-26.
+      # It fails CLOSED: if this value were ever damaged, n8n refuses to
+      # connect rather than connecting unverified. If Render ever mangled the
+      # line breaks, the fallback is a Render Secret File holding the same PEM
+      # plus DB_POSTGRESDB_SSL_CA_FILE=/etc/secrets/<name> (n8n reads *_FILE).
+      - key: DB_POSTGRESDB_SSL_ENABLED
+        value: "true"
+      - key: DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED
+        value: "true"
+      - key: DB_POSTGRESDB_SSL_CA
+        value: |
+          -----BEGIN CERTIFICATE-----
+          MIIDxDCCAqygAwIBAgIUbLxMod62P2ktCiAkxnKJwtE9VPYwDQYJKoZIhvcNAQEL
+          BQAwazELMAkGA1UEBhMCVVMxEDAOBgNVBAgMB0RlbHdhcmUxEzARBgNVBAcMCk5l
+          dyBDYXN0bGUxFTATBgNVBAoMDFN1cGFiYXNlIEluYzEeMBwGA1UEAwwVU3VwYWJh
+          c2UgUm9vdCAyMDIxIENBMB4XDTIxMDQyODEwNTY1M1oXDTMxMDQyNjEwNTY1M1ow
+          azELMAkGA1UEBhMCVVMxEDAOBgNVBAgMB0RlbHdhcmUxEzARBgNVBAcMCk5ldyBD
+          YXN0bGUxFTATBgNVBAoMDFN1cGFiYXNlIEluYzEeMBwGA1UEAwwVU3VwYWJhc2Ug
+          Um9vdCAyMDIxIENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqQXW
+          QyHOB+qR2GJobCq/CBmQ40G0oDmCC3mzVnn8sv4XNeWtE5XcEL0uVih7Jo4Dkx1Q
+          DmGHBH1zDfgs2qXiLb6xpw/CKQPypZW1JssOTMIfQppNQ87K75Ya0p25Y3ePS2t2
+          GtvHxNjUV6kjOZjEn2yWEcBdpOVCUYBVFBNMB4YBHkNRDa/+S4uywAoaTWnCJLUi
+          cvTlHmMw6xSQQn1UfRQHk50DMCEJ7Cy1RxrZJrkXXRP3LqQL2ijJ6F4yMfh+Gyb4
+          O4XajoVj/+R4GwywKYrrS8PrSNtwxr5StlQO8zIQUSMiq26wM8mgELFlS/32Uclt
+          NaQ1xBRizkzpZct9DwIDAQABo2AwXjALBgNVHQ8EBAMCAQYwHQYDVR0OBBYEFKjX
+          uXY32CztkhImng4yJNUtaUYsMB8GA1UdIwQYMBaAFKjXuXY32CztkhImng4yJNUt
+          aUYsMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAB8spzNn+4VU
+          tVxbdMaX+39Z50sc7uATmus16jmmHjhIHz+l/9GlJ5KqAMOx26mPZgfzG7oneL2b
+          VW+WgYUkTT3XEPFWnTp2RJwQao8/tYPXWEJDc0WVQHrpmnWOFKU/d3MqBgBm5y+6
+          jB81TU/RG2rVerPDWP+1MMcNNy0491CTL5XQZ7JfDJJ9CCmXSdtTl4uUQnSuv/Qx
+          Cea13BX2ZgJc7Au30vihLhub52De4P/4gonKsNHYdbWjg7OWKwNv/zitGDVDB9Y2
+          CMTyZKG3XEu5Ghl1LEnI3QmEKsqaCLv12BnVjbkSeZsMnevJPs1Ye6TjjJwdik5P
+          o/bKiIz+Fq8=
+          -----END CERTIFICATE-----
+      # --- Pool and health checks: sized for 0.1 CPU -------------------------
+      # A free instance gets 0.1 CPU as well as 512 MB. n8n 2.40.5 pings the
+      # database every DB_PING_INTERVAL_SECONDS (default 2) through a POOL
+      # connection, fails the ping after DB_PING_TIMEOUT_MS (default 5000),
+      # and after 3 failures in a row DESTROYS AND REBUILDS the whole pool
+      # (db-connection-monitor.js). "Database ping failed: Database connection
+      # timed out" is that ping - not DB_POSTGRESDB_CONNECTION_TIMEOUT.
+      #
+      # At 0.1 CPU, startup work holds the event loop past 5 s, so the ping's
+      # timer fires before the reply is read: a false alarm. It is not
+      # harmless - ONE failed ping marks the database "not connected", and
+      # until the next ping succeeds n8n answers every webhook with 503
+      # "Database is not ready!", so a will submission arriving then is
+      # deferred. With a pool of 2, the ping and one slow query also starve
+      # every other query. Measured on 2026-09-24 (512 MB, --cpus=0.1, 70 ms
+      # to Postgres, warm schema, the four production workflows published):
+      #   pool 2, ping timeout 5 s  -> 3 ping failures, a full pool teardown
+      #                                ("Connection terminated unexpectedly"),
+      #                                4 queries failing "timeout exceeded
+      #                                when trying to connect"
+      #   pool 4, ping timeout 15 s -> no teardowns, no query timeouts, but
+      #                                still 1-2 false pings while n8n indexes
+      #                                its workflows; with the interval also
+      #                                raised to 15 s, webhooks got 503 for
+      #                                18 s after one of them
+      #   the values below          -> 0 ping failures, 0 teardowns, 0 query
+      #                                timeouts, 0 503s over 27 minutes: boot
+      #                                plus two full upload load tests
+      # Hence: timeout 30 s, so a CPU stall is not mistaken for an outage, and
+      # the ping INTERVAL left at its 2 s default, so if one ever is, webhooks
+      # recover within ~2 s. A dead connection is still caught: three
+      # consecutive 30 s timeouts rebuild the pool.
+      #
+      # Four session-pooler connections, measured exactly 4 at Postgres. The
+      # portal talks to Supabase over HTTP (PostgREST) and holds none.
+      - key: DB_POSTGRESDB_POOL_SIZE
+        value: "4"
+      # How long a query may wait for a pool slot or a new connection (n8n
+      # default 20000). A real outage still surfaces - just not a slow start.
+      - key: DB_POSTGRESDB_CONNECTION_TIMEOUT
+        value: "30000"
+      - key: DB_PING_TIMEOUT_MS
+        value: "30000"
+
+      # --- Encryption key ----------------------------------------------------
+      # MUST match the key that encrypted the existing data. On 2.x that is
+      # stricter than it was: n8n stores its own deployment keys in the
+      # database (n8n.deployment_key, created 2026-09-23 by the first 2.x
+      # boot) encrypted with this key, and refuses to start with any other -
+      # "Deployment key 'signing.hmac' cannot be read with this instance
+      # encryption key".
+      #
+      # sync: false. It was committed here as a plaintext value for a while,
+      # which puts it in git history for everyone with access to this repo;
+      # removing it from the file does not undo that - see the audit notes on
+      # rotation. Render IGNORES sync:false entries when an existing Blueprint
+      # is updated, so the value already stored in the dashboard stays exactly
+      # as it is; this change does not blank it. It is the same value as
+      # N8N_ENCRYPTION_KEY in automation/.env (verified by hash).
+      - key: N8N_ENCRYPTION_KEY
+        sync: false
+
+      # --- Public URL / OAuth callbacks -------------------------------------
+      # N8N_EDITOR_BASE_URL is what n8n uses to build OAuth callback URLs, so it
+      # must match the redirect URI registered in the Google/Meta consoles:
+      #   {N8N_EDITOR_BASE_URL}/rest/oauth2-credential/callback
+      #
+      # These MUST be literal https URLs, not `fromService`.
+      # `property: hostport` yields "n8n-automation:5678" — no scheme, and the
+      # wrong port for a public caller (Render terminates TLS on 443). n8n does
+      # not normalise that value the way the portal's server.js does; it
+      # concatenates it straight into the OAuth redirect, producing
+      #   n8n-automation:5678/rest/oauth2-credential/callback
+      # which no Google or Meta console will ever accept. Reconnecting Drive or
+      # YouTube would fail at the redirect with no useful error, and every
+      # webhook n8n advertises would point at an address that resolves nowhere.
+      #
+      # n8n.vbllawchambers.com is declared in this service's `domains:` above.
+      # Until the CNAME for it actually resolves (see
+      # automation/deploy/DNS_AND_DOMAINS.md), these values are still correct
+      # to leave in place - a domain Render has not verified yet simply is not
+      # reachable, rather than silently falling back to anything else, so
+      # there is no working alternate URL to fall back to in the meantime.
+      - key: N8N_EDITOR_BASE_URL
+        value: https://n8n-automation-p7cc.onrender.com
+      # N8N_WEBHOOK_URL, not WEBHOOK_URL: 2.x lists WEBHOOK_URL as deprecated
+      # ("Use N8N_WEBHOOK_URL instead") and warns on every boot.
+      - key: N8N_WEBHOOK_URL
+        value: https://n8n-automation-p7cc.onrender.com
+      - key: N8N_HOST
+        value: n8n-automation-p7cc.onrender.com
+      - key: N8N_PROTOCOL
+        value: https
+      - key: N8N_PORT
+        value: 5678
+
+      # --- Runtime -----------------------------------------------------------
+      - key: GENERIC_TIMEZONE
+        value: Asia/Kolkata
+      - key: TZ
+        value: Asia/Kolkata
+      # --- EDITOR AUTHENTICATION -------------------------------------------
+      # The editor holds live Google Drive, YouTube and Meta credentials.
+      # User management is always on in 2.x (N8N_USER_MANAGEMENT_DISABLED no
+      # longer exists and was removed from here). The owner account in this
+      # database was claimed on 2026-09-15, so there is no open owner-setup
+      # screen; were the n8n schema ever recreated, whoever reached the fresh
+      # instance first would become owner - claim it immediately.
+      # Never expose the unauthenticated public REST API.
+      - key: N8N_PUBLIC_API_DISABLED
+        value: "true"
+      # Behind Render's proxy n8n must trust the forwarded headers, otherwise
+      # it builds callback URLs from the internal address.
+      - key: N8N_PROXY_HOPS
+        value: "1"
+
+      # Binary data goes to the container's ephemeral disk rather than into
+      # memory (and thence Postgres). Free instances have NO persistent disk,
+      # so this survives only for the life of one execution - which is all it
+      # needs to. Memory mode would push large media through the 512 MB heap.
+      - key: N8N_DEFAULT_BINARY_DATA_MODE
+        value: filesystem
+      # MiB per multipart file. n8n 2.40.5 defaults to 200; the portal accepts
+      # documents and media up to 500 MB and forwards them here unchanged.
+      - key: N8N_FORMDATA_FILE_SIZE_MAX
+        value: "500"
+
+      # --- MEMORY: what makes 2.x fit in 512 MB ----------------------------
+      # Measured on 2026-09-23: n8n 2.40.5, 512 MB / no swap, this env, warm
+      # boot against an already-migrated schema (the state production is in):
+      #
+      #   all default modules  -> "JavaScript heap out of memory" during boot
+      #                           (Node auto-sizes the heap to 268 MB in a
+      #                           512 MB cgroup; 2.x needs more than that to
+      #                           start with every module loaded). This is
+      #                           why the Render service showed no live deploy.
+      #   modules below off    -> 11/11 boots OK (9 on a throwaway Postgres,
+      #                           2 against this production schema); idle
+      #                           282-340 MB; peak NON-reclaimable memory
+      #                           during boot ~428 MB (84 MB headroom);
+      #                           210/210 Code-node executions OK (incl. 5
+      #                           concurrent); cgroup peak incl. page cache
+      #                           451-512 MB; zero OOM kills.
+      #
+      # Re-measured on 2026-09-24 with the pool, ping, heap and runner values
+      # in this file, at 512 MB AND 0.1 CPU (the free CPU share), 70 ms to
+      # Postgres, the four production workflows published, and the Will
+      # workflow uploading through the real Google Drive node to a stand-in
+      # Google API. Figures are NON-reclaimable (anon) memory, which is what
+      # an OOM kill follows; the cgroup total also fills with page cache from
+      # filesystem binary mode, and the kernel reclaims that first.
+      #   boot                        418 MB peak, ready in ~250 s
+      #   idle                        ~320 MB (the task runner is ~130 of it)
+      #   one submission, 3 x 40 MB   ~372 MB
+      #   three at once, 2 x 40 MB    443 MB   <- worst case, 69 MB headroom
+      #   one 200 MB document         402 MB
+      #   two full passes             0 OOM kills, back to ~321 MB idle each time
+      # File size barely moves these: the Drive node streams each document
+      # from disk in 2 MB chunks, so memory follows concurrency, not size.
+      #
+      # Every name here is a module this deployment does not use: enterprise
+      # features that need a licence (SSO, LDAP, source control, external
+      # secrets, log streaming, provisioning, reviews, dynamic credentials),
+      # the AI builder/agents/chat hub, insights, OpenTelemetry, community
+      # package installs (every workflow in automation/n8n uses core nodes
+      # only) and the v3 breaking-changes scanner. MCP (mcp, mcp-registry,
+      # oauth-server), OAuth and credential modules are deliberately KEPT.
+      #
+      # n8n rejects unknown module names at boot. Before bumping the image,
+      # check each name still exists in that release's MODULE_NAMES
+      # (@n8n/backend-common/dist/modules/modules.config.js).
+      - key: N8N_DISABLED_MODULES
+        value: insights,external-secrets,community-packages,provisioning,breaking-changes,source-control,dynamic-credentials,chat-hub,sso-oidc,sso-saml,log-streaming,ldap,workflow-builder,instance-registry,otel,workflow-reviews,instance-ai
+      # Main-process heap, pinned. Node derives its default from the cgroup
+      # limit IF it can see one: 268 MB inside a visible 512 MB limit, but
+      # 2,144 MB when it cannot (measured, same image). With the larger
+      # ceiling V8 barely collects until the container is past 512 MB and is
+      # OOM-killed. 256 matches the visible-limit default, so nothing changes
+      # where the limit is visible, and it no longer depends on Render
+      # exposing it. The portal's Dockerfile pins its heap for the same
+      # reason. n8n replaces NODE_OPTIONS for the task runner (below), so this
+      # does not leak into it.
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=256
+      # Code nodes run in a separate task-runner process (always on in 2.x -
+      # N8N_RUNNERS_ENABLED is ignored and was removed from here). 96 MB
+      # contains a runaway Code node to a failed TASK instead of an
+      # OOM-killed n8n. It was 128; the runner's resident size is ~120-130 MB
+      # either way, but the lower cap takes 32 MB off the worst case, and
+      # these workflows' Code nodes handle a few hundred rows at most.
+      - key: N8N_RUNNERS_MAX_OLD_SPACE_SIZE
+        value: "96"
+      # The runner must register with the broker within this many seconds of
+      # launch (default 30). At 0.1 CPU it takes longer while n8n is still
+      # starting: measured 4 rejected attempts ("invalid or expired grant
+      # token"), each a fresh ~130 MB process, and no Code node could run
+      # for ~6 minutes after boot. At 120 it registered on the first attempt.
+      - key: N8N_RUNNERS_GRANT_TOKEN_TTL
+        value: "120"
+      - key: N8N_DIAGNOSTICS_ENABLED
+        value: "false"
+      - key: N8N_HIRING_BANNER_ENABLED
+        value: "false"
+      # Executions now accumulate in the SAME 500 MB free tier as the client
+      # legal tables, so pruning stopped being housekeeping and became a
+      # capacity control: an unpruned execution history can fill the database
+      # the will registry depends on.
+      - key: EXECUTIONS_DATA_PRUNE
+        value: "true"
+      - key: EXECUTIONS_DATA_MAX_AGE
+        value: "168"            # hours (7 days)
+      - key: EXECUTIONS_DATA_PRUNE_MAX_COUNT
+        value: "2000"
+
+      # --- Publishing credentials (optional) --------------------------------
+      - key: OPENROUTER_API_KEY
+        sync: false

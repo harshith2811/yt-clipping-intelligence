@@ -1,0 +1,171 @@
+# =============================================================================
+# VBL Law Chambers — Caddy reverse proxy (automatic Let's Encrypt TLS)
+#
+# ⚠️  COST NOTE — READ FIRST
+# This file is only needed if you run the stack on a SERVER YOU CONTROL.
+# Caddy is free software, but it needs a host with a public IP and open
+# ports 80/443.
+#
+#   FREE hosts where this file applies:
+#     * Oracle Cloud "Always Free" ARM VM (4 vCPU / 24 GB) — genuinely free
+#     * Any machine you already pay for (home server behind a static IP)
+#
+#   If you deploy on RENDER instead, YOU DO NOT NEED THIS FILE. Render
+#   terminates TLS and maps custom domains itself; you add a CNAME per service
+#   and Caddy never enters the picture. See deploy/render.yaml and the DNS
+#   table in the deployment runbook.
+#
+# Subdomains served here:
+#   vbllawchambers.com            public website + client tracker
+#   admin.vbllawchambers.com      chambers legal vault (client wills, PII)
+#   automation.vbllawchambers.com publishing suite (content calendar, engine)
+#   n8n.vbllawchambers.com        workflow hub
+#
+# Install:
+#   sudo cp Caddyfile /etc/caddy/Caddyfile
+#   sudo caddy validate --config /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# Certificates are provisioned and renewed automatically — no certbot.
+# =============================================================================
+
+{
+	email admin@vbllawchambers.com
+}
+
+# --- Shared security headers -------------------------------------------------
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		-Server
+	}
+}
+
+# Stricter still: the two privileged surfaces must never be framed at all.
+# SAMEORIGIN would still permit framing from the same host; these are
+# credentialed admin UIs, so DENY is correct.
+(admin_headers) {
+	import security_headers
+	header {
+		X-Frame-Options "DENY"
+		X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+		Cache-Control "no-store"
+	}
+}
+
+# =============================================================================
+# 1. PUBLIC WEBSITE — vbllawchambers.com
+#    Static build from website/dist. /api/* is proxied so the client tracker
+#    (/will-submission) can reach the registry on the same origin.
+# =============================================================================
+vbllawchambers.com, www.vbllawchambers.com {
+	import security_headers
+	header X-Frame-Options "SAMEORIGIN"
+
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy localhost:3300
+	}
+
+	handle {
+		root * /srv/vbllawchambers/website/dist
+		# Vite SPA: unknown paths fall back to index.html. Pre-rendered routes
+		# (about.html, will-submission.html, …) are served directly by try_files
+		# before the fallback, which is what keeps their SEO markup intact.
+		try_files {path} {path}.html {path}/index.html /index.html
+		file_server
+	}
+}
+
+# =============================================================================
+# 2. CHAMBERS LEGAL VAULT — admin.vbllawchambers.com
+#    Serves the SAME website bundle but lands on /admin. Client wills, testator
+#    PII and Drive lockers live behind CHAMBERS_ADMIN_SECRET_KEY.
+# =============================================================================
+admin.vbllawchambers.com {
+	import admin_headers
+
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy localhost:3300
+	}
+
+	# Land on the admin portal rather than the marketing homepage.
+	@root path /
+	redir @root /admin permanent
+
+	handle {
+		root * /srv/vbllawchambers/website/dist
+		try_files {path} {path}.html /index.html
+		file_server
+	}
+}
+
+# =============================================================================
+# 3. PUBLISHING SUITE — automation.vbllawchambers.com
+#    The Express app serves both its own React bundle and the API on :3300.
+#    Guarded by AUTOMATION_SECRET_KEY; that credential cannot read client files.
+# =============================================================================
+automation.vbllawchambers.com {
+	import admin_headers
+
+	encode zstd gzip
+
+	reverse_proxy localhost:3300 {
+		# Video uploads are large and slow. Without a raised write timeout Caddy
+		# cuts the connection mid-upload and the operator sees a generic failure.
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+		# Preserve the real client address so the tracker throttle and the
+		# Express `trust proxy` setting bucket real callers, not this proxy.
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Real-IP {remote_host}
+		header_up Host {host}
+	}
+
+	# 500 MB matches the multer fileSize cap in server.js. Keeping them in sync
+	# means an oversized upload is rejected with a clear 413 rather than dying
+	# halfway through.
+	request_body {
+		max_size 500MB
+	}
+}
+
+# =============================================================================
+# 4. WORKFLOW HUB — n8n.vbllawchambers.com
+#    The editor UI holds Google/Meta credentials, so it is protected by n8n's
+#    own basic auth (N8N_BASIC_AUTH_*). Webhooks must stay open: Meta, Google
+#    and the portal call them unauthenticated.
+# =============================================================================
+n8n.vbllawchambers.com {
+	import security_headers
+	# n8n's editor uses its own frame handling; DENY breaks some panels.
+	header X-Frame-Options "SAMEORIGIN"
+	header X-Robots-Tag "noindex, nofollow"
+
+	reverse_proxy localhost:5678 {
+		# n8n's editor is a live websocket app. Without these upgrades the UI
+		# loads but executions never stream and the canvas appears frozen.
+		header_up Connection {>Connection}
+		header_up Upgrade {>Upgrade}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Real-IP {remote_host}
+		header_up Host {host}
+
+		transport http {
+			read_timeout 600s
+			write_timeout 600s
+		}
+	}
+
+	request_body {
+		max_size 500MB
+	}
+}

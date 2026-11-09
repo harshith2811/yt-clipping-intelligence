@@ -1,0 +1,32 @@
+node_modules
+dist
+docs
+.env
+.env.*
+*.log
+.web-portal.pid
+Dockerfile
+.dockerignore
+
+# ---------------------------------------------------------------------------
+# CLIENT DATA — never goes into a build context.
+#
+# The builder stage does `COPY . .` so that Vite can build the bundle. Without
+# these lines that copy swept up:
+#
+#   data/submissions.json   every testator's name, parent/spouse, age, phone,
+#                           address and privileged drafting instructions
+#   uploads/                the actual title deeds, pattadar passbooks and
+#                           draft wills
+#
+# Both were therefore uploaded to Render's build servers and baked into a
+# builder image layer. The runtime stage never copies them, so they are absent
+# from the deployed image — but they had no business leaving this machine at
+# all. The server recreates both directories at startup if they are missing.
+# ---------------------------------------------------------------------------
+data
+uploads
+
+# Local tooling that has no place in an image.
+*.test.mjs
+.vscode

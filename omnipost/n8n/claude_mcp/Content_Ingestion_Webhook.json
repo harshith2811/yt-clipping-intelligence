@@ -1,0 +1,152 @@
+{
+  "id": "f5mDlezsdqUQVEpE",
+  "name": "Content Ingestion Webhook",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-upload",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f69d0961-8ca7-43ab-8024-a840ef65091d",
+      "name": "Upload Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-900, 300],
+      "webhookId": "e3d75232-76bb-46a8-a3e2-c9f428f178ea"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "inputDataFieldName": "data",
+        "name": "={{ $binary.data?.fileName || ('Upload_' + $now.toFormat('yyyyMMdd_HHmmss') + '.mp4') }}",
+        "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
+        "folderId": { "__rl": true, "mode": "id", "value": "1Q171pLkFgucgHO0bJ1lRWlxC3en-tHZz" },
+        "options": {}
+      },
+      "id": "6aa74b88-34c7-47d1-9411-6108cc61b974",
+      "name": "Upload Media to Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-660, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const hook = $('Upload Webhook').first().json;\nconst body = hook.body || hook;\nconst driveFile = $input.first().json;\n\nconst now = new Date();\nconst pad = (n) => String(n).padStart(2, '0');\nconst contentId = 'W-' + String(now.getFullYear()).slice(-2) + pad(now.getMonth() + 1) + pad(now.getDate()) + '-' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());\n\nconst platforms = (Array.isArray(body.platforms) ? body.platforms.join(',') : (body.platforms || 'instagram,facebook,youtube')).toLowerCase();\n\nlet scheduled = now.toISOString();\nif (body.scheduledDateTime && body.scheduledDateTime !== 'now') {\n  const parsed = new Date(body.scheduledDateTime);\n  if (!isNaN(parsed.getTime())) scheduled = parsed.toISOString();\n}\n\nreturn [{\n  json: {\n    'Content ID': contentId,\n    'Title': body.title || 'Legal Awareness Post',\n    'Caption': body.caption || '',\n    'Platforms': platforms,\n    'Scheduled DateTime': scheduled,\n    'Status': body.status || 'Pending Review',\n    'Retry Count': 0,\n    'Posted At': '',\n    'Error': '',\n    'Public Media URL': body.publicMediaUrl || '',\n    'Pinterest Board ID': body.pinterestBoardId || '',\n    'Drive File ID': driveFile.id,\n    'Instagram Status': '',\n    'Facebook Status': '',\n    'YouTube Status': '',\n    'LinkedIn Status': '',\n    'Pinterest Status': '',\n    'Threads Status': '',\n    driveFileUrl: driveFile.webViewLink || ('https://drive.google.com/file/d/' + driveFile.id + '/view')\n  }\n}];"
+
+      },
+      "id": "e5604911-702e-4a32-98f3-42987d8bb5cd",
+      "name": "Prepare Row Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-420, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "documentId": { "__rl": true, "mode": "id", "value": "14NFIyGUMg4hcTZ3hTIZklayVYstvxvpOesesgpEF72M", "cachedResultName": "Content Calendar" },
+        "sheetName": { "__rl": true, "mode": "name", "value": "Untitled" },
+        "columns": { "mappingMode": "autoMapInputData", "value": {} },
+        "options": { "cellFormat": "RAW", "handlingExtraData": "ignoreIt" }
+      },
+      "id": "4388071d-4292-472e-bd61-8e0b7525851d",
+      "name": "Append to Content Calendar",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [-180, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Content uploaded and scheduled successfully!', contentId: $('Prepare Row Data').first().json['Content ID'], driveFileId: $('Prepare Row Data').first().json['Drive File ID'], driveFileUrl: $('Prepare Row Data').first().json.driveFileUrl, status: $('Prepare Row Data').first().json.Status, scheduledDateTime: $('Prepare Row Data').first().json['Scheduled DateTime'] } }}",
+        "options": {}
+      },
+      "id": "2d04fe5b-f754-41bf-9c12-30ec7e7c1396",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [60, 300],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "content-list",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d944577f-1a64-4f5b-a83a-9c4791a9d79d",
+      "name": "Get Content Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-900, 560],
+      "webhookId": "c2877486-bf6a-4b3d-a8af-8c9f76164183"
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": { "__rl": true, "mode": "id", "value": "14NFIyGUMg4hcTZ3hTIZklayVYstvxvpOesesgpEF72M", "cachedResultName": "Content Calendar" },
+        "sheetName": { "__rl": true, "mode": "name", "value": "Untitled" },
+        "options": {}
+      },
+      "id": "02079623-3d80-4183-bb62-5ae0c94a9236",
+      "name": "Read Content Calendar Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [-660, 560],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// An empty sheet arrives as one empty item (alwaysOutputData), which this filter drops.\nconst rows = $input.all()\n  .map((i) => i.json)\n  .filter((r) => r['Content ID'] && String(r['Content ID']).trim() !== '');\nreturn [{ json: { success: true, count: rows.length, posts: rows.reverse() } }];"
+      },
+      "id": "7fe65257-c377-456a-9375-235336db1ca4",
+      "name": "Format Posts List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-420, 560]
+    },
+    {
+      "parameters": { "respondWith": "firstIncomingItem", "options": {} },
+      "id": "142c4d8f-fd04-4519-a9c3-2c9f3d7391b9",
+      "name": "Respond List",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [-180, 560]
+    },
+    {
+      "parameters": {
+        "content": "## Content Ingestion\n\nPOST /webhook/content-upload - the portal composer (POST /api/upload) files a media item into Drive and appends a Content Calendar row with all six platform status columns.\n\nGET /webhook/content-list - the portal calendar (GET /api/posts) and pre-flight read the calendar.\n\nMedia is filed in the Chambers Vault root; point \"Upload Media to Drive\" at a dedicated folder if you keep one.\n\n**Before publishing:** Google Drive + Google Sheets credentials, and the \"VBL Portal Webhook Key\" Header Auth credential on both webhooks.",
+        "color": 4
+      },
+      "id": "274e5b61-20ae-46e8-9de4-9a608946f58f",
+      "name": "Sticky Note 243802d2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-900, 760]
+    }
+  ],
+  "connections": {
+    "Upload Webhook": { "main": [[{ "node": "Upload Media to Drive", "type": "main", "index": 0 }]] },
+    "Upload Media to Drive": { "main": [[{ "node": "Prepare Row Data", "type": "main", "index": 0 }]] },
+    "Prepare Row Data": { "main": [[{ "node": "Append to Content Calendar", "type": "main", "index": 0 }]] },
+    "Append to Content Calendar": { "main": [[{ "node": "Respond Success", "type": "main", "index": 0 }]] },
+    "Get Content Webhook": { "main": [[{ "node": "Read Content Calendar Rows", "type": "main", "index": 0 }]] },
+    "Read Content Calendar Rows": { "main": [[{ "node": "Format Posts List", "type": "main", "index": 0 }]] },
+    "Format Posts List": { "main": [[{ "node": "Respond List", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

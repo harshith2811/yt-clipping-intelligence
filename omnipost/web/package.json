@@ -1,0 +1,40 @@
+{
+  "name": "omnipost-social-automation",
+  "version": "1.0.0",
+  "description": "Universal Multi-Platform Social Media Publishing & Video Automation Engine",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --max-old-space-size=256 server.js",
+    "setup": "node ../scripts/setup-wizard.js",
+    "dev:server": "node server.js",
+    "dev:client": "vite",
+    "dev": "concurrently \"node server.js\" \"vite\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test \"publishing/*.test.mjs\"",
+    "verify": "node verify-imports.mjs && node --test \"publishing/*.test.mjs\""
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "axios": "^1.7.9",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.22.3",
+    "form-data": "^4.0.1",
+    "multer": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "lucide-react": "^0.475.0",
+    "pg": "^8.23.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^6.1.0"
+  }
+}

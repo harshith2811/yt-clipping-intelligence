@@ -1926,7 +1926,177 @@
 
     .toast-icon { color: var(--emerald); }
 
-    /* SVG Icon Helpers */
+    /* Video Editor Studio */
+    .editor-grid {
+      display: grid;
+      grid-template-columns: minmax(420px, 1.05fr) minmax(480px, 1.35fr);
+      gap: 1.5rem;
+    }
+    @media (max-width: 1024px) {
+      .editor-grid { grid-template-columns: 1fr; }
+    }
+    .editor-viewport-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      align-items: center;
+    }
+    .editor-canvas-stage {
+      position: relative;
+      background: #000;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      max-width: 380px;
+      aspect-ratio: 9/16;
+      border: 1px solid var(--border);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.6);
+      transition: aspect-ratio 0.25s ease, max-width 0.25s ease;
+    }
+    .editor-canvas-stage.aspect-16-9 { aspect-ratio: 16/9; max-width: 100%; }
+    .editor-canvas-stage.aspect-1-1 { aspect-ratio: 1/1; max-width: 400px; }
+    .editor-canvas-stage video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .editor-text-overlay-preview {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.75);
+      color: #fff;
+      padding: 0.35rem 0.85rem;
+      border-radius: 6px;
+      font-weight: 800;
+      text-align: center;
+      pointer-events: none;
+      z-index: 10;
+      max-width: 90%;
+      font-size: 0.95rem;
+      letter-spacing: -0.01em;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .editor-text-overlay-preview.pos-top { top: 12%; }
+    .editor-text-overlay-preview.pos-center { top: 50%; transform: translate(-50%, -50%); }
+    .editor-text-overlay-preview.pos-bottom { bottom: 12%; }
+
+    .editor-timeline-box {
+      background: var(--bg-inner);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      width: 100%;
+    }
+    .editor-timeline-track {
+      position: relative;
+      height: 40px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .editor-timeline-selected-range {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: rgba(59, 130, 246, 0.22);
+      border-left: 2px solid var(--blue);
+      border-right: 2px solid var(--blue);
+      pointer-events: none;
+    }
+    .editor-timeline-playhead {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #fff;
+      z-index: 5;
+      pointer-events: none;
+    }
+    .editor-timeline-handle {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 10px;
+      background: var(--blue);
+      cursor: ew-resize;
+      z-index: 10;
+      border-radius: 2px;
+      box-shadow: 0 0 6px rgba(0,0,0,0.5);
+      pointer-events: auto;
+    }
+    .editor-timeline-handle.handle-start { left: 0; transform: translateX(-50%); }
+    .editor-timeline-handle.handle-end { right: 0; transform: translateX(50%); }
+    .editor-timeline-handle::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 2px;
+      height: 12px;
+      background: #fff;
+      border-radius: 1px;
+    }
+
+    /* Publishing Studio & Channel Cards */
+    .publishing-channel-card {
+      background: var(--bg-inner);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .publishing-channel-info {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+    .publishing-channel-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--bg-root);
+      border: 1px solid var(--border);
+      object-fit: cover;
+    }
+    .publishing-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.825rem;
+      margin-top: 0.5rem;
+    }
+    .publishing-table th {
+      text-align: left;
+      padding: 0.75rem;
+      background: var(--bg-inner);
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      font-weight: 700;
+    }
+    .publishing-table td {
+      padding: 0.75rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-main);
+    }
+    .publishing-table tr:hover td {
+      background: rgba(255,255,255,0.015);
     .svg-icon {
       width: 16px;
       height: 16px;
@@ -1955,6 +2125,14 @@
       <button class="nav-btn active" id="navStudio" onclick="switchView('studio')">
         <svg class="svg-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
         <span>Studio</span>
+      </button>
+      <button class="nav-btn" id="navEditor" onclick="switchView('editor')">
+        <svg class="svg-icon" viewBox="0 0 24 24"><polygon points="14 2 18 6 7 17 3 17 3 13 14 2"></polygon><line x1="3" y1="22" x2="21" y2="22"></line></svg>
+        <span>Video Editor</span>
+      </button>
+      <button class="nav-btn" id="navPublishing" onclick="switchView('publishing')">
+        <svg class="svg-icon" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+        <span>Publishing & Channels</span>
       </button>
       <button class="nav-btn" id="navProjects" onclick="switchView('projects')">
         <svg class="svg-icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
@@ -2226,12 +2404,24 @@
               </div>
             </div>
 
-            <div class="player-actions">
-              <a href="#" id="btnDownloadShort" class="btn btn-primary" style="flex: 1; text-align: center;" download aria-label="Download finished vertical short video">
-                <svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                <span>Download MP4 (<span id="activeClipSizeMb">0.0</span> MB)</span>
-              </a>
-              <span class="brand-badge" id="activeClipQABadge" style="color: var(--emerald); border-color: rgba(16,185,129,0.3); background: var(--emerald-light);">QA Verified (1080x1920)</span>
+            <div class="player-actions" style="display: flex; flex-direction: column; gap: 0.5rem; width: 100%;">
+              <div style="display: flex; gap: 0.5rem; width: 100%;">
+                <a href="#" id="btnDownloadShort" class="btn btn-primary" style="flex: 1; text-align: center;" download aria-label="Download finished vertical short video">
+                  <svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <span>Download (<span id="activeClipSizeMb">0.0</span> MB)</span>
+                </a>
+                <span class="brand-badge" id="activeClipQABadge" style="color: var(--emerald); border-color: rgba(16,185,129,0.3); background: var(--emerald-light); align-self: center;">QA: PASSED</span>
+              </div>
+              <div style="display: flex; gap: 0.5rem; width: 100%;">
+                <button id="btnOpenInEditor" class="btn btn-secondary" style="flex: 1;" onclick="openActiveClipInEditor()">
+                  <svg class="svg-icon" viewBox="0 0 24 24"><polygon points="14 2 18 6 7 17 3 17 3 13 14 2"></polygon><line x1="3" y1="22" x2="21" y2="22"></line></svg>
+                  <span>Open in Editor</span>
+                </button>
+                <button id="btnOpenInPublish" class="btn btn-accent" style="flex: 1;" onclick="openActiveClipInPublishing()">
+                  <svg class="svg-icon" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+                  <span>Publish Clip</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -2336,6 +2526,371 @@
     </div>
 
     <!-- ============================================================== -->
+    <!-- VIEW: MANUAL VIDEO EDITOR WORKSPACE                           -->
+    <!-- ============================================================== -->
+    <div id="viewEditor" style="display: none; flex-direction: column; gap: 1.5rem;">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              <svg class="svg-icon" viewBox="0 0 24 24"><polygon points="14 2 18 6 7 17 3 17 3 13 14 2"></polygon><line x1="3" y1="22" x2="21" y2="22"></line></svg>
+              <span>Manual Precision Video Editor</span>
+            </div>
+            <div class="card-subtitle">Precision trimming, pan & dynamic composition, multi-ratio reframing, and multi-clip batch extraction.</div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button class="btn btn-sm btn-secondary" onclick="editorUndo()" title="Undo edit action"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg> <span>Undo</span></button>
+            <button class="btn btn-sm btn-secondary" onclick="editorRedo()" title="Redo edit action"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 7v6h-6"></path><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"></path></svg> <span>Redo</span></button>
+            <button class="btn btn-sm btn-primary" id="btnExportEditorClips" onclick="executeEditorExport()">
+              <svg class="svg-icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              <span>Export Rendered Clip(s)</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="editor-grid">
+          <!-- Left: Video Viewport Stage & Player Controls -->
+          <div class="editor-viewport-card">
+            <!-- Dynamic Aspect Ratio Stage -->
+            <div class="editor-canvas-stage aspect-9-16" id="editorCanvasStage">
+              <video id="editorVideoPlayer" playsinline preload="metadata"></video>
+              <div id="editorTextOverlayPreview" class="editor-text-overlay-preview pos-top" style="display: none;">Sample Text Overlay</div>
+            </div>
+
+            <!-- Scrubber Playback Controls -->
+            <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%; justify-content: center; margin-top: 0.25rem;">
+              <button class="btn btn-sm btn-secondary" onclick="editorStepFrame(-1)" title="Step -1 frame (0.04s)">◀ -1 Frame</button>
+              <button class="btn btn-sm btn-primary" id="editorPlayPauseBtn" onclick="toggleEditorPlayback()">Play</button>
+              <button class="btn btn-sm btn-secondary" onclick="editorStepFrame(1)" title="Step +1 frame (0.04s)">+1 Frame ▶</button>
+              <span id="editorTimestampDisplay" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-main); margin-left: 0.5rem;">00:00.00 / 00:00.00</span>
+              <select id="editorPlaybackSpeed" class="select-input" style="width: 70px; padding: 0.25rem 0.5rem; font-size: 0.75rem;" onchange="setEditorPlaybackRate(this.value)">
+                <option value="0.5">0.5x</option>
+                <option value="1.0" selected>1.0x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2.0">2.0x</option>
+              </select>
+              <select id="editorPreviewRes" class="select-input" style="width: 75px; padding: 0.25rem 0.5rem; font-size: 0.75rem;" onchange="setEditorPreviewResolution(this.value)" title="Preview Resolution">
+                <option value="1080p" selected>1080p</option>
+                <option value="720p">720p</option>
+                <option value="480p">480p</option>
+                <option value="360p">360p</option>
+              </select>
+            </div>
+
+            <!-- Precision Timeline Scrubber with Start/End Trim Handles -->
+            <div class="editor-timeline-box">
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+                <span style="font-weight: 700; color: var(--text-secondary);">Interactive Timeline & Clip Boundary</span>
+                <span id="editorTrimDurationText" style="font-family: var(--font-mono); color: var(--blue);">Selection: 30.0s</span>
+              </div>
+              <div class="editor-timeline-track" id="editorTimelineTrack">
+                <div class="editor-timeline-selected-range" id="editorSelectedRange" style="left: 0%; width: 100%;">
+                  <div class="editor-timeline-handle handle-start" id="editorHandleStart" title="Drag to adjust start trim"></div>
+                  <div class="editor-timeline-handle handle-end" id="editorHandleEnd" title="Drag to adjust end trim"></div>
+                </div>
+                <div class="editor-timeline-playhead" id="editorTimelinePlayhead" style="left: 0%;"></div>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                <div>
+                  <label class="setting-label" style="font-size: 0.7rem;">Start Trim (seconds)</label>
+                  <input type="number" step="0.1" min="0" id="editorStartInput" class="text-input" style="padding-left: 0.75rem; height: 32px; font-size: 0.8rem;" value="0.0" oninput="onEditorTrimInputChange()">
+                </div>
+                <div>
+                  <label class="setting-label" style="font-size: 0.7rem;">End Trim (seconds)</label>
+                  <input type="number" step="0.1" min="0" id="editorEndInput" class="text-input" style="padding-left: 0.75rem; height: 32px; font-size: 0.8rem;" value="30.0" oninput="onEditorTrimInputChange()">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Composition & Multi-Clip Manager Controls -->
+          <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+            <!-- Panel A: Composition & Framing -->
+            <div class="card" style="padding: 1.1rem; gap: 0.85rem; background: var(--bg-inner);">
+              <div class="card-title" style="font-size: 0.875rem;">
+                <svg class="svg-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+                <span>Aspect Ratio & Visual Composition</span>
+              </div>
+
+              <!-- Ratio Selector -->
+              <div class="platform-tabs" style="margin-bottom: 0.5rem;">
+                <button class="platform-tab-btn active" id="btnRatio916" onclick="setEditorAspectRatio('9:16')">9:16 Vertical (Shorts/Reels)</button>
+                <button class="platform-tab-btn" id="btnRatio169" onclick="setEditorAspectRatio('16:9')">16:9 Landscape (YouTube)</button>
+                <button class="platform-tab-btn" id="btnRatio11" onclick="setEditorAspectRatio('1:1')">1:1 Square (Feed)</button>
+              </div>
+
+              <!-- Subject Pan Offset -->
+              <div class="setting-row">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label class="setting-label">Horizontal Subject Pan (Crop Center)</label>
+                  <span id="editorPanLabel" style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">50% (Center)</span>
+                </div>
+                <input type="range" min="0" max="100" value="50" id="editorPanRange" class="range-slider" oninput="onEditorPanChange(this.value)">
+                <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted);">
+                  <span>Left (0%)</span>
+                  <span>Center (50%)</span>
+                  <span>Right (100%)</span>
+                </div>
+              </div>
+
+              <!-- Text Overlays -->
+              <div class="setting-row" style="margin-top: 0.5rem;">
+                <label class="setting-label">Title Card & Text Overlay</label>
+                <div style="display: flex; gap: 0.5rem;">
+                  <input type="text" id="editorTextInput" class="text-input" style="padding-left: 0.75rem;" placeholder="Add impactful hook text..." oninput="onEditorTextOverlayChange()">
+                  <select id="editorTextPosSelect" class="select-input" style="width: 110px;" onchange="onEditorTextPosChange(this.value)">
+                    <option value="top" selected>Top</option>
+                    <option value="center">Center</option>
+                    <option value="bottom">Bottom</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Panel B: Multi-Clip Segment Manager -->
+            <div class="card" style="padding: 1.1rem; gap: 0.85rem; background: var(--bg-inner);">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="card-title" style="font-size: 0.875rem;">
+                  <svg class="svg-icon" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                  <span>Multi-Clip Segment Manager</span>
+                </div>
+                <button class="btn btn-sm btn-primary" onclick="addCurrentSegmentToClips()">
+                  <svg class="svg-icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  <span>Add Clip Segment</span>
+                </button>
+              </div>
+              <div class="card-subtitle" style="font-size: 0.75rem;">Extract multiple distinct vertical clips from one long video source. Each clip preserves its own trim, crop, and overlay states.</div>
+
+              <!-- Extracted Clips List -->
+              <div id="editorSegmentsList" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 220px; overflow-y: auto; padding-right: 0.25rem;">
+                <div style="color: var(--text-muted); font-size: 0.8rem; text-align: center; padding: 1rem 0;">No extra segments added yet. Click "+ Add Clip Segment" to save the active selection.</div>
+              </div>
+            </div>
+
+            <!-- Panel C: Export Status & Diagnostics -->
+            <div id="editorExportStatusCard" class="card" style="display: none; padding: 1rem; background: rgba(16,185,129,0.06); border-color: rgba(16,185,129,0.3);">
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <div class="spinner" id="editorExportSpinner" style="display: none;"></div>
+                <div id="editorExportStatusMsg" style="font-size: 0.825rem; font-weight: 600; color: var(--text-main);">Rendering clip...</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- VIEW: OMNIPOST & YOUTUBE PUBLISHING WORKSPACE                  -->
+    <!-- ============================================================== -->
+    <div id="viewPublishing" style="display: none; flex-direction: column; gap: 1.5rem;">
+      <!-- Row 1: Channel Hub Cards -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.25rem;">
+        <!-- Card 1: Dedicated YouTube Channel (Isolated OAuth) -->
+        <div class="card" style="padding: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="card-title" style="font-size: 0.9rem;">
+              <svg class="svg-icon" viewBox="0 0 24 24" style="color: #ef4444;"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon></svg>
+              <span>Dedicated YouTube Channel</span>
+            </div>
+            <span class="brand-badge" id="ytChannelBadge" style="background: rgba(239,68,68,0.1); color: #ef4444; border-color: rgba(239,68,68,0.3);">Checking...</span>
+          </div>
+          <div class="publishing-channel-card" style="margin-top: 0.75rem;">
+            <div class="publishing-channel-info">
+              <img id="ytChannelAvatar" class="publishing-channel-avatar" src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&auto=format&fit=crop&q=80" alt="Channel Avatar">
+              <div>
+                <div id="ytChannelTitle" style="font-weight: 700; font-size: 0.875rem;">Loading Channel...</div>
+                <div id="ytChannelMeta" style="font-size: 0.75rem; color: var(--text-muted);">Dedicated OAuth 2.0 Isolated Session</div>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-secondary" id="btnConnectGoogle" onclick="connectGoogleAccount()">Connect Google</button>
+          </div>
+        </div>
+
+        <!-- Card 2: OmniPost Multi-Platform Publishing Gateway -->
+        <div class="card" style="padding: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="card-title" style="font-size: 0.9rem;">
+              <svg class="svg-icon" viewBox="0 0 24 24" style="color: var(--blue);"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+              <span>OmniPost Multi-Channel Gateway</span>
+            </div>
+            <span class="brand-badge" id="omniGatewayBadge" style="background: rgba(59,130,246,0.1); color: var(--blue); border-color: rgba(59,130,246,0.3);">Port 3300</span>
+          </div>
+          <div class="publishing-channel-card" style="margin-top: 0.75rem;">
+            <div class="publishing-channel-info">
+              <div style="width: 44px; height: 44px; border-radius: 50%; background: var(--bg-panel); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-weight: 800; color: var(--blue);">OP</div>
+              <div>
+                <div style="font-weight: 700; font-size: 0.875rem;">OmniPost Social Hub</div>
+                <div id="omniReadyChannelsText" style="font-size: 0.75rem; color: var(--text-muted);">Channels: YouTube, Instagram Reels, Facebook, LinkedIn</div>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-secondary" onclick="checkPublishChannels()">Refresh Status</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 2: Publishing Dispatcher & Explicit Human Gate -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              <svg class="svg-icon" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+              <span>Publish Clip to Social Channels</span>
+            </div>
+            <div class="card-subtitle">Review, edit metadata, configure scheduling, and provide explicit human authorization.</div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: minmax(360px, 1fr) minmax(400px, 1.3fr); gap: 1.5rem; margin-top: 1rem;">
+          <!-- Left: Clip Preview & Picker -->
+          <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <label class="setting-label">Selection Mode</label>
+              <div class="platform-tabs" style="margin-bottom: 0;">
+                <button class="platform-tab-btn active" id="btnPubModeSingle" onclick="setPublishMode('single')">Single Clip</button>
+                <button class="platform-tab-btn" id="btnPubModeBatch" onclick="setPublishMode('batch')">Batch Multi-Clip</button>
+              </div>
+            </div>
+
+            <!-- Single Clip Dropdown -->
+            <div class="setting-row" id="pubSingleClipRow">
+              <label class="setting-label">Select Clip to Publish</label>
+              <select id="pubClipSelect" class="select-input" onchange="onPublishClipSelected(this.value)">
+                <option value="">Select a rendered or edited clip...</option>
+              </select>
+            </div>
+
+            <!-- Batch Multi-Clip Container -->
+            <div class="setting-row" id="pubBatchClipRow" style="display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <label class="setting-label">Select Clips (<span id="pubBatchCount">0</span> selected)</label>
+                <button class="btn btn-sm btn-secondary" style="padding: 0.15rem 0.5rem; font-size: 0.7rem;" onclick="toggleSelectAllBatchClips()">Toggle All</button>
+              </div>
+              <div id="pubBatchCheckboxList" style="max-height: 180px; overflow-y: auto; background: var(--bg-root); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem;">
+                <span style="color: var(--text-muted); font-size: 0.75rem;">Loading clips...</span>
+              </div>
+            </div>
+
+            <div class="editor-canvas-stage aspect-9-16" style="max-width: 280px; align-self: center; margin-top: 0.5rem;">
+              <video id="pubVideoPlayer" controls playsinline preload="metadata"></video>
+            </div>
+            <div id="pubClipDetails" style="font-size: 0.75rem; color: var(--text-muted); text-align: center;">
+              Select a clip above to preview before publishing.
+            </div>
+          </div>
+
+          <!-- Right: Publishing Form & Human Approval Gate -->
+          <div style="display: flex; flex-direction: column; gap: 1rem;">
+            <div class="setting-row">
+              <label class="setting-label">Destination Platform / Target</label>
+              <select id="pubTargetSelect" class="select-input" onchange="onPublishTargetChange(this.value)">
+                <option value="youtube_dedicated" selected>Dedicated YouTube Channel (Direct Isolated OAuth)</option>
+                <option value="omnipost">OmniPost Multi-Channel Gateway (YouTube, Instagram, Facebook)</option>
+              </select>
+            </div>
+
+            <div class="setting-row" id="pubChannelSelectRow">
+              <label class="setting-label">Destination YouTube Channel</label>
+              <select id="pubChannelSelect" class="select-input">
+                <option value="">Default Dedicated Channel</option>
+              </select>
+            </div>
+
+            <div class="setting-row">
+              <label class="setting-label">Custom Video Thumbnail (Optional)</label>
+              <input type="text" id="pubThumbnailInput" class="text-input" style="padding-left: 0.85rem;" placeholder="Path to thumbnail image (e.g. data/thumbnails/cover.jpg or URL)...">
+            </div>
+
+            <div class="setting-row">
+              <label class="setting-label">Video Title</label>
+              <input type="text" id="pubTitleInput" class="text-input" style="padding-left: 0.85rem;" placeholder="Compelling short title...">
+            </div>
+
+            <div class="setting-row">
+              <label class="setting-label">Description & Hashtags</label>
+              <textarea id="pubDescInput" class="caption-editor" style="min-height: 90px;" placeholder="Video description and tags..."></textarea>
+            </div>
+
+            <div class="setting-row">
+              <label class="setting-label">Tags (comma-separated)</label>
+              <input type="text" id="pubTagsInput" class="text-input" style="padding-left: 0.85rem;" value="shorts, viral, trending, highlights">
+            </div>
+
+            <div class="setting-row">
+              <label class="setting-label">Publishing Schedule</label>
+              <div style="display: flex; gap: 0.75rem; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; cursor: pointer;">
+                  <input type="radio" name="pubScheduleMode" value="immediate" checked onchange="toggleScheduleDate(false)">
+                  Publish Immediately
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; cursor: pointer;">
+                  <input type="radio" name="pubScheduleMode" value="scheduled" onchange="toggleScheduleDate(true)">
+                  Schedule for Later
+                </label>
+                <input type="datetime-local" id="pubScheduleDate" class="text-input" style="display: none; height: 34px; padding-left: 0.5rem; width: 200px;">
+              </div>
+            </div>
+
+            <!-- MANDATORY HUMAN APPROVAL GATE -->
+            <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: var(--radius-sm); padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; color: var(--amber); font-weight: 700; font-size: 0.85rem;">
+                <svg class="svg-icon" viewBox="0 0 24 24"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                <span>Explicit Human Authorization Required</span>
+              </div>
+              <div style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4;">
+                This system will never publish autonomously without human verification. You must inspect the generated video and check the box below to authorize publication.
+              </div>
+              <label style="display: flex; align-items: center; gap: 0.6rem; font-size: 0.825rem; font-weight: 600; color: var(--text-main); cursor: pointer; margin-top: 0.25rem;">
+                <input type="checkbox" id="pubApprovalCheckbox" style="width: 18px; height: 18px; accent-color: var(--emerald);">
+                <span>I have reviewed the video, verified rights and QA, and approve publication.</span>
+              </label>
+            </div>
+
+            <button class="btn btn-primary" id="btnExecutePublish" style="height: 44px; font-size: 0.9rem;" onclick="submitPublishJob()">
+              <svg class="svg-icon" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+              <span>Approve & Publish Video</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Publishing Ledger & History Table -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span>Publishing History & Delivery Ledger</span>
+            </div>
+            <div class="card-subtitle">Real-time verification log with idempotency keys, safe recovery retries, and target delivery URLs.</div>
+          </div>
+          <button class="btn btn-sm btn-secondary" onclick="loadPublishHistory()">
+            <svg class="svg-icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            <span>Refresh Ledger</span>
+          </button>
+        </div>
+
+        <div style="overflow-x: auto; margin-top: 0.5rem;">
+          <table class="publishing-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Clip ID</th>
+                <th>Title</th>
+                <th>Target Channel</th>
+                <th>Status</th>
+                <th>Details / URL</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="pubHistoryTableBody">
+              <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading publishing history...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <!-- ============================================================== -->
     <!-- VIEW 2: PROJECT HISTORY & ARCHIVE                              -->
     <!-- ============================================================== -->
     <div id="viewProjects" style="display: none; flex-direction: column; gap: 1.5rem;">
@@ -2384,6 +2939,31 @@
         </div>
 
         <div class="settings-grid">
+
+          <!-- Card: Dedicated Google Account & OAuth Isolation -->
+          <div class="card" style="background: var(--bg-inner);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="card-title" style="font-size: 0.9rem;">
+                <svg class="svg-icon" viewBox="0 0 24 24" style="color: #ef4444;"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon></svg>
+                <span>Dedicated Google Account & Credential Isolation</span>
+              </div>
+              <span class="brand-badge" id="setGoogleStatusBadge" style="background: rgba(16,185,129,0.1); color: var(--emerald); border-color: rgba(16,185,129,0.3);">Isolated</span>
+            </div>
+            <div class="setting-desc" style="margin-top: 0.25rem;">
+              Strict credential isolation: this automation engine connects to an isolated Google Account for publishing without accessing personal accounts.
+            </div>
+            <div style="display: flex; gap: 0.85rem; align-items: center; margin-top: 0.75rem; background: var(--bg-root); padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+              <img id="setGoogleAvatar" src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=128&auto=format&fit=crop&q=80" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border);" alt="Avatar">
+              <div style="flex: 1;">
+                <div id="setGoogleTitle" style="font-weight: 700; font-size: 0.85rem;">Dedicated Automation Channel</div>
+                <div id="setGoogleHandle" style="font-size: 0.75rem; color: var(--text-muted);">@AutoShortsStudio • 14.2K Subscribers</div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+              <button class="btn btn-sm btn-primary" onclick="connectGoogleAccount()">Re-authorize Account</button>
+              <button class="btn btn-sm btn-secondary" style="color: var(--rose);" onclick="disconnectGoogleAccount()">Disconnect</button>
+            </div>
+          </div>
 
           <!-- Card A: AI & Synthesis Engine -->
           <div class="card" style="background: var(--bg-inner);">
@@ -2949,19 +3529,39 @@
     function switchView(viewName) {
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       const isStudio = viewName === 'studio';
+      const isEditor = viewName === 'editor';
+      const isPublishing = viewName === 'publishing';
       const isProjects = viewName === 'projects';
       const isSettings = viewName === 'settings';
 
-      document.getElementById('navStudio').classList.toggle('active', isStudio);
-      document.getElementById('navProjects').classList.toggle('active', isProjects);
-      document.getElementById('navSettings').classList.toggle('active', isSettings);
+      const navS = document.getElementById('navStudio');
+      const navE = document.getElementById('navEditor');
+      const navPub = document.getElementById('navPublishing');
+      const navP = document.getElementById('navProjects');
+      const navSet = document.getElementById('navSettings');
 
-      document.getElementById('viewStudio').style.display = isStudio ? 'flex' : 'none';
-      document.getElementById('viewProjects').style.display = isProjects ? 'flex' : 'none';
-      document.getElementById('viewSettings').style.display = isSettings ? 'flex' : 'none';
+      if (navS) navS.classList.toggle('active', isStudio);
+      if (navE) navE.classList.toggle('active', isEditor);
+      if (navPub) navPub.classList.toggle('active', isPublishing);
+      if (navP) navP.classList.toggle('active', isProjects);
+      if (navSet) navSet.classList.toggle('active', isSettings);
+
+      const viewS = document.getElementById('viewStudio');
+      const viewE = document.getElementById('viewEditor');
+      const viewPub = document.getElementById('viewPublishing');
+      const viewP = document.getElementById('viewProjects');
+      const viewSet = document.getElementById('viewSettings');
+
+      if (viewS) viewS.style.display = isStudio ? 'flex' : 'none';
+      if (viewE) viewE.style.display = isEditor ? 'flex' : 'none';
+      if (viewPub) viewPub.style.display = isPublishing ? 'flex' : 'none';
+      if (viewP) viewP.style.display = isProjects ? 'flex' : 'none';
+      if (viewSet) viewSet.style.display = isSettings ? 'flex' : 'none';
 
       if (isProjects) loadProjects();
       if (isSettings) loadSettings();
+      if (isEditor) initEditorWorkspace();
+      if (isPublishing) loadPublishingView();
     }
 
     async function checkHealth() {
@@ -3699,12 +4299,910 @@ Storage Base Path:    ${data.storage.data_dir}
       }
     }
 
+    // ==============================================================
+    // MANUAL VIDEO EDITOR WORKSPACE
+    // ==============================================================
+    let editorSourceClip = null;
+    let editorCurrentRatio = '9:16';
+    let editorCropPan = 0.5;
+    let editorTextOverlay = '';
+    let editorTextPos = 'top';
+    let editorStartTime = 0.0;
+    let editorEndTime = 30.0;
+    let editorVideoDuration = 30.0;
+    let editorSegments = [];
+    let editorUndoStack = [];
+    let editorRedoStack = [];
+
+    function formatTimestamp(seconds) {
+      if (isNaN(seconds) || seconds < 0) seconds = 0;
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      const ms = Math.floor((seconds % 1) * 100);
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(2, '0')}`;
+    }
+
+    function openActiveClipInEditor() {
+      if (typeof currentSelectedClip !== 'undefined' && currentSelectedClip) {
+        editorSourceClip = currentSelectedClip;
+      }
+      switchView('editor');
+      initEditorWorkspace(editorSourceClip);
+    }
+
+    function initEditorWorkspace(clip) {
+      if (clip) {
+        editorSourceClip = clip;
+      } else if (!editorSourceClip && typeof activeClipsList !== 'undefined' && activeClipsList && activeClipsList.length > 0) {
+        editorSourceClip = activeClipsList[0];
+      }
+
+      const player = document.getElementById('editorVideoPlayer');
+      if (!player) return;
+
+      if (editorSourceClip) {
+        const src = editorSourceClip.media_url || (editorSourceClip.clip_id ? `/api/v1/clips/${editorSourceClip.clip_id}/stream` : '');
+        if (src && player.getAttribute('src') !== src) {
+          player.src = src;
+          player.load();
+        }
+      }
+
+      if (!player._editorListenersBound) {
+        player._editorListenersBound = true;
+        initTimelineDragging();
+
+        player.addEventListener('loadedmetadata', () => {
+          editorVideoDuration = player.duration || 30.0;
+          editorStartTime = 0.0;
+          editorEndTime = Math.min(editorVideoDuration, 30.0);
+
+          const startIn = document.getElementById('editorStartInput');
+          const endIn = document.getElementById('editorEndInput');
+          if (startIn) {
+            startIn.value = editorStartTime.toFixed(1);
+            startIn.max = editorVideoDuration.toFixed(1);
+          }
+          if (endIn) {
+            endIn.value = editorEndTime.toFixed(1);
+            endIn.max = editorVideoDuration.toFixed(1);
+          }
+          updateEditorTimelineUI();
+        });
+
+        player.addEventListener('timeupdate', () => {
+          const cur = player.currentTime;
+          const dur = editorVideoDuration || player.duration || 1;
+          const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
+
+          const playhead = document.getElementById('editorTimelinePlayhead');
+          if (playhead) playhead.style.left = `${pct}%`;
+
+          const timeDisplay = document.getElementById('editorTimestampDisplay');
+          if (timeDisplay) timeDisplay.innerText = `${formatTimestamp(cur)} / ${formatTimestamp(dur)}`;
+
+          // Loop selection boundary
+          if (cur >= editorEndTime && !player.paused) {
+            player.currentTime = editorStartTime;
+          }
+        });
+
+        player.addEventListener('play', () => {
+          const btn = document.getElementById('editorPlayPauseBtn');
+          if (btn) btn.innerText = 'Pause';
+        });
+
+        player.addEventListener('pause', () => {
+          const btn = document.getElementById('editorPlayPauseBtn');
+          if (btn) btn.innerText = 'Play';
+        });
+      }
+
+      updateEditorTimelineUI();
+      renderEditorSegmentsList();
+    }
+
+    function initTimelineDragging() {
+      const track = document.getElementById('editorTimelineTrack');
+      const handleStart = document.getElementById('editorHandleStart');
+      const handleEnd = document.getElementById('editorHandleEnd');
+      if (!track || !handleStart || !handleEnd) return;
+      track.addEventListener('click', onEditorTimelineClick);
+
+      function onPointerDown(e, isStart) {
+        e.stopPropagation();
+        e.preventDefault();
+        pushEditorHistory();
+        const rect = track.getBoundingClientRect();
+
+        function onPointerMove(ev) {
+          const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+          const dur = editorVideoDuration || 30.0;
+          const timeVal = parseFloat((pct * dur).toFixed(1));
+          if (isStart) {
+            if (timeVal < editorEndTime - 0.2) {
+              editorStartTime = Math.max(0, timeVal);
+              const startIn = document.getElementById('editorStartInput');
+              if (startIn) startIn.value = editorStartTime.toFixed(1);
+              updateEditorTimelineUI();
+            }
+          } else {
+            if (timeVal > editorStartTime + 0.2) {
+              editorEndTime = Math.min(dur, timeVal);
+              const endIn = document.getElementById('editorEndInput');
+              if (endIn) endIn.value = editorEndTime.toFixed(1);
+              updateEditorTimelineUI();
+            }
+          }
+        }
+
+        function onPointerUp() {
+          window.removeEventListener('pointermove', onPointerMove);
+          window.removeEventListener('pointerup', onPointerUp);
+        }
+
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+      }
+
+      handleStart.addEventListener('pointerdown', (e) => onPointerDown(e, true));
+      handleEnd.addEventListener('pointerdown', (e) => onPointerDown(e, false));
+    }
+
+    function setEditorPreviewResolution(res) {
+      const stage = document.getElementById('editorCanvasStage');
+      if (!stage) return;
+      if (res === '360p') {
+        stage.style.filter = 'contrast(0.96) brightness(0.95)';
+      } else if (res === '480p') {
+        stage.style.filter = 'contrast(0.98)';
+      } else {
+        stage.style.filter = 'none';
+      }
+      showToast(`Preview Resolution: ${res}`);
+    }
+
+    function toggleEditorPlayback() {
+      const player = document.getElementById('editorVideoPlayer');
+      if (!player) return;
+      if (player.paused) {
+        if (player.currentTime < editorStartTime || player.currentTime >= editorEndTime) {
+          player.currentTime = editorStartTime;
+        }
+        player.play().catch(console.error);
+      } else {
+        player.pause();
+      }
+    }
+
+    function editorStepFrame(delta) {
+      const player = document.getElementById('editorVideoPlayer');
+      if (!player) return;
+      player.pause();
+      const step = 0.04 * delta;
+      player.currentTime = Math.max(0, Math.min(editorVideoDuration, player.currentTime + step));
+    }
+
+    function setEditorPlaybackRate(rate) {
+      const player = document.getElementById('editorVideoPlayer');
+      if (player) player.playbackRate = parseFloat(rate);
+    }
+
+    function onEditorTimelineClick(e) {
+      const track = document.getElementById('editorTimelineTrack');
+      const player = document.getElementById('editorVideoPlayer');
+      if (!track || !player) return;
+      const rect = track.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const pct = Math.max(0, Math.min(1, clickX / rect.width));
+      const newTime = pct * (editorVideoDuration || 30.0);
+      player.currentTime = newTime;
+    }
+
+    function onEditorTrimInputChange() {
+      pushEditorHistory();
+      const startIn = document.getElementById('editorStartInput');
+      const endIn = document.getElementById('editorEndInput');
+      const startVal = parseFloat(startIn?.value) || 0.0;
+      const endVal = parseFloat(endIn?.value) || editorVideoDuration;
+
+      if (startVal < endVal && endVal <= (editorVideoDuration + 0.1)) {
+        editorStartTime = Math.max(0, startVal);
+        editorEndTime = Math.min(editorVideoDuration, endVal);
+        updateEditorTimelineUI();
+      }
+    }
+
+    function updateEditorTimelineUI() {
+      const dur = editorVideoDuration || 30.0;
+      const leftPct = (editorStartTime / dur) * 100;
+      const widthPct = Math.max(1, ((editorEndTime - editorStartTime) / dur) * 100);
+
+      const range = document.getElementById('editorSelectedRange');
+      if (range) {
+        range.style.left = `${leftPct}%`;
+        range.style.width = `${widthPct}%`;
+      }
+      const durationText = document.getElementById('editorTrimDurationText');
+      if (durationText) {
+        durationText.innerText = `Selection: ${(editorEndTime - editorStartTime).toFixed(1)}s`;
+      }
+    }
+
+    function setEditorAspectRatio(ratio) {
+      pushEditorHistory();
+      editorCurrentRatio = ratio;
+      document.getElementById('btnRatio916')?.classList.toggle('active', ratio === '9:16');
+      document.getElementById('btnRatio169')?.classList.toggle('active', ratio === '16:9');
+      document.getElementById('btnRatio11')?.classList.toggle('active', ratio === '1:1');
+
+      const stage = document.getElementById('editorCanvasStage');
+      if (stage) {
+        stage.classList.remove('aspect-9-16', 'aspect-16-9', 'aspect-1-1');
+        stage.classList.add(`aspect-${ratio.replace(':', '-')}`);
+      }
+    }
+
+    function onEditorPanChange(val) {
+      const num = parseInt(val, 10);
+      editorCropPan = num / 100.0;
+      const label = document.getElementById('editorPanLabel');
+      if (label) {
+        const text = num < 45 ? `${num}% (Left)` : num > 55 ? `${num}% (Right)` : `${num}% (Center)`;
+        label.innerText = text;
+      }
+      const player = document.getElementById('editorVideoPlayer');
+      if (player) {
+        player.style.objectPosition = `${num}% center`;
+      }
+    }
+
+    function onEditorTextOverlayChange() {
+      editorTextOverlay = (document.getElementById('editorTextInput')?.value || '').trim();
+      const preview = document.getElementById('editorTextOverlayPreview');
+      if (preview) {
+        preview.innerText = editorTextOverlay || 'Sample Text Overlay';
+        preview.style.display = editorTextOverlay ? 'block' : 'none';
+      }
+    }
+
+    function onEditorTextPosChange(pos) {
+      pushEditorHistory();
+      editorTextPos = pos;
+      const preview = document.getElementById('editorTextOverlayPreview');
+      if (preview) {
+        preview.classList.remove('pos-top', 'pos-center', 'pos-bottom');
+        preview.classList.add(`pos-${pos}`);
+      }
+    }
+
+    function pushEditorHistory() {
+      editorUndoStack.push({
+        start: editorStartTime,
+        end: editorEndTime,
+        ratio: editorCurrentRatio,
+        pan: editorCropPan,
+        text: editorTextOverlay,
+        textPos: editorTextPos
+      });
+      if (editorUndoStack.length > 20) editorUndoStack.shift();
+      editorRedoStack = [];
+    }
+
+    function editorUndo() {
+      if (editorUndoStack.length === 0) return showToast('Nothing to undo');
+      const curr = {
+        start: editorStartTime,
+        end: editorEndTime,
+        ratio: editorCurrentRatio,
+        pan: editorCropPan,
+        text: editorTextOverlay,
+        textPos: editorTextPos
+      };
+      editorRedoStack.push(curr);
+      const state = editorUndoStack.pop();
+      applyEditorState(state);
+      showToast('Undo');
+    }
+
+    function editorRedo() {
+      if (editorRedoStack.length === 0) return showToast('Nothing to redo');
+      const state = editorRedoStack.pop();
+      editorUndoStack.push({
+        start: editorStartTime,
+        end: editorEndTime,
+        ratio: editorCurrentRatio,
+        pan: editorCropPan,
+        text: editorTextOverlay,
+        textPos: editorTextPos
+      });
+      applyEditorState(state);
+      showToast('Redo');
+    }
+
+    function applyEditorState(s) {
+      if (!s) return;
+      editorStartTime = s.start;
+      editorEndTime = s.end;
+      const startIn = document.getElementById('editorStartInput');
+      const endIn = document.getElementById('editorEndInput');
+      if (startIn) startIn.value = s.start.toFixed(1);
+      if (endIn) endIn.value = s.end.toFixed(1);
+      updateEditorTimelineUI();
+
+      setEditorAspectRatio(s.ratio);
+
+      const panIn = document.getElementById('editorPanRange');
+      if (panIn) {
+        panIn.value = Math.round(s.pan * 100);
+        onEditorPanChange(Math.round(s.pan * 100));
+      }
+
+      const textIn = document.getElementById('editorTextInput');
+      if (textIn) {
+        textIn.value = s.text || '';
+        onEditorTextOverlayChange();
+      }
+
+      const posIn = document.getElementById('editorTextPosSelect');
+      if (posIn) {
+        posIn.value = s.textPos || 'top';
+        onEditorTextPosChange(s.textPos || 'top');
+      }
+    }
+
+    function addCurrentSegmentToClips() {
+      const title = (editorSourceClip ? (editorSourceClip.title || 'Clip') : 'Segment') + ` (${editorStartTime.toFixed(1)}s - ${editorEndTime.toFixed(1)}s)`;
+      const seg = {
+        id: 'seg_' + Date.now().toString(36),
+        title: title,
+        start_seconds: editorStartTime,
+        end_seconds: editorEndTime,
+        aspect_ratio: editorCurrentRatio,
+        center_x: editorCropPan,
+        center_y: 0.5,
+        text_overlay: editorTextOverlay || null,
+        text_position: editorTextPos || 'top'
+      };
+      editorSegments.push(seg);
+      renderEditorSegmentsList();
+      showToast('Clip segment added');
+    }
+
+    function removeEditorSegment(id) {
+      editorSegments = editorSegments.filter(s => s.id !== id);
+      renderEditorSegmentsList();
+    }
+
+    function previewEditorSegment(idx) {
+      const s = editorSegments[idx];
+      if (!s) return;
+      applyEditorState({
+        start: s.start_seconds,
+        end: s.end_seconds,
+        ratio: s.aspect_ratio,
+        pan: s.center_x,
+        text: s.text_overlay,
+        textPos: s.text_position || 'top',
+      });
+      const player = document.getElementById('editorVideoPlayer');
+      if (player) {
+        player.currentTime = s.start_seconds;
+        player.play().catch(console.error);
+      }
+      showToast(`Previewing segment #${idx + 1}`);
+    }
+
+    function renameEditorSegment(idx) {
+      const s = editorSegments[idx];
+      if (!s) return;
+      const newTitle = prompt('Rename segment title:', s.title);
+      if (newTitle && newTitle.trim()) {
+        s.title = newTitle.trim();
+        renderEditorSegmentsList();
+        showToast('Segment renamed');
+      }
+    }
+
+    function moveEditorSegment(idx, direction) {
+      const targetIdx = idx + direction;
+      if (targetIdx < 0 || targetIdx >= editorSegments.length) return;
+      const temp = editorSegments[idx];
+      editorSegments[idx] = editorSegments[targetIdx];
+      editorSegments[targetIdx] = temp;
+      renderEditorSegmentsList();
+    }
+
+    function renderEditorSegmentsList() {
+      const container = document.getElementById('editorSegmentsList');
+      if (!container) return;
+      if (editorSegments.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.8rem; text-align: center; padding: 1rem 0;">No extra segments added yet. Click "+ Add Clip Segment" to save the active selection.</div>';
+        return;
+      }
+      container.innerHTML = editorSegments.map((s, idx) => `
+        <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-root); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem; gap: 0.5rem;">
+          <div style="display: flex; flex-direction: column; flex: 1;">
+            <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-main); display: flex; align-items: center; gap: 0.35rem;">
+              <span>#${idx + 1}: ${sanitizeHTML(s.title)}</span>
+              <button type="button" class="btn btn-sm btn-secondary" style="padding: 0.1rem 0.35rem; font-size: 0.65rem;" onclick="renameEditorSegment(${idx})" title="Rename segment">✏️</button>
+            </span>
+            <span style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">${s.start_seconds.toFixed(1)}s → ${s.end_seconds.toFixed(1)}s (${(s.end_seconds - s.start_seconds).toFixed(1)}s) • Ratio: ${s.aspect_ratio}${s.text_overlay ? ' • Overlay' : ''}</span>
+          </div>
+          <div style="display: flex; gap: 0.25rem; align-items: center;">
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 0.15rem 0.4rem; font-size: 0.65rem;" onclick="previewEditorSegment(${idx})" title="Preview segment">▶ Preview</button>
+            <button class="btn btn-sm btn-secondary" style="padding: 0.15rem 0.35rem; font-size: 0.65rem;" onclick="moveEditorSegment(${idx}, -1)" ${idx === 0 ? 'disabled' : ''} title="Move Up">▲</button>
+            <button class="btn btn-sm btn-secondary" style="padding: 0.15rem 0.35rem; font-size: 0.65rem;" onclick="moveEditorSegment(${idx}, 1)" ${idx === editorSegments.length - 1 ? 'disabled' : ''} title="Move Down">▼</button>
+            <button class="btn btn-sm btn-secondary" style="color: var(--rose); padding: 0.15rem 0.4rem; font-size: 0.7rem;" onclick="removeEditorSegment('${s.id}')" title="Delete">✕</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function executeEditorExport() {
+      if (!editorSourceClip) {
+        return alert('No active source video found to export from.');
+      }
+
+      let clipsToExport = [...editorSegments];
+      if (clipsToExport.length === 0) {
+        clipsToExport.push({
+          title: (editorSourceClip.title || 'Edited Short') + ' (Custom)',
+          start_seconds: editorStartTime,
+          end_seconds: editorEndTime,
+          aspect_ratio: editorCurrentRatio,
+          center_x: editorCropPan,
+          center_y: 0.5,
+          text_overlay: editorTextOverlay || null,
+          text_position: editorTextPos || 'top'
+        });
+      }
+
+      const statusCard = document.getElementById('editorExportStatusCard');
+      const spinner = document.getElementById('editorExportSpinner');
+      const msg = document.getElementById('editorExportStatusMsg');
+      const btn = document.getElementById('btnExportEditorClips');
+
+      if (statusCard) statusCard.style.display = 'block';
+      if (spinner) spinner.style.display = 'inline-block';
+      if (btn) btn.disabled = true;
+      if (msg) msg.innerText = `Rendering ${clipsToExport.length} custom clip(s) with FFmpeg...`;
+
+      try {
+        const payload = {
+          source_path: editorSourceClip.file_path || editorSourceClip.media_url || editorSourceClip.clip_id,
+          project_id: editorSourceClip.project_id || 'proj_editor_export',
+          clips: clipsToExport
+        };
+
+        const res = await fetch('/api/v1/editor/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || 'Export failed');
+        }
+
+        if (msg) msg.innerText = `Success! Exported ${data.exported_count} clip(s) to project library.`;
+        showToast(`Successfully exported ${data.exported_count} clip(s)!`);
+        editorSegments = [];
+        renderEditorSegmentsList();
+        loadRecentClips();
+      } catch (err) {
+        if (msg) msg.innerText = `Export error: ${err.message}`;
+        showToast(`Export error: ${err.message}`);
+      } finally {
+        if (spinner) spinner.style.display = 'none';
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    // ==============================================================
+    // PUBLISHING WORKFLOW & HUMAN GOVERNANCE
+    // ==============================================================
+    let cachedPublishClips = [];
+    let selectedPublishClip = null;
+    let publishMode = 'single'; // 'single' or 'batch'
+    let selectedBatchClipIds = new Set();
+
+    function setPublishMode(mode) {
+      publishMode = mode;
+      document.getElementById('btnPubModeSingle')?.classList.toggle('active', mode === 'single');
+      document.getElementById('btnPubModeBatch')?.classList.toggle('active', mode === 'batch');
+      const singleRow = document.getElementById('pubSingleClipRow');
+      const batchRow = document.getElementById('pubBatchClipRow');
+      if (singleRow) singleRow.style.display = mode === 'single' ? 'block' : 'none';
+      if (batchRow) batchRow.style.display = mode === 'batch' ? 'block' : 'none';
+    }
+
+    function toggleSelectAllBatchClips() {
+      if (selectedBatchClipIds.size === cachedPublishClips.length) {
+        selectedBatchClipIds.clear();
+      } else {
+        cachedPublishClips.forEach(c => selectedBatchClipIds.add(c.clip_id));
+      }
+      renderBatchCheckboxes();
+    }
+
+    function onBatchClipToggled(clipId, isChecked) {
+      if (isChecked) {
+        selectedBatchClipIds.add(clipId);
+      } else {
+        selectedBatchClipIds.delete(clipId);
+      }
+      const counter = document.getElementById('pubBatchCount');
+      if (counter) counter.innerText = selectedBatchClipIds.size;
+    }
+
+    function renderBatchCheckboxes() {
+      const container = document.getElementById('pubBatchCheckboxList');
+      const counter = document.getElementById('pubBatchCount');
+      if (counter) counter.innerText = selectedBatchClipIds.size;
+      if (!container) return;
+
+      if (!cachedPublishClips || cachedPublishClips.length === 0) {
+        container.innerHTML = '<span style="color: var(--text-muted); font-size: 0.75rem;">No rendered clips found in workspace.</span>';
+        return;
+      }
+
+      container.innerHTML = cachedPublishClips.map(c => `
+        <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.775rem; color: var(--text-main); cursor: pointer; padding: 0.25rem 0.35rem; border-radius: 4px; background: rgba(255,255,255,0.02);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; overflow: hidden;">
+            <input type="checkbox" value="${c.clip_id}" ${selectedBatchClipIds.has(c.clip_id) ? 'checked' : ''} onchange="onBatchClipToggled('${c.clip_id}', this.checked)" style="accent-color: var(--blue);">
+            <span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;">${sanitizeHTML(c.title || c.candidate_data?.hook_title || c.clip_id)}</span>
+          </div>
+          <span style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">${(c.duration_seconds || 30).toFixed(1)}s • ★${Math.round(c.score || 85)}</span>
+        </label>
+      `).join('');
+    }
+
+    function openActiveClipInPublishing() {
+      if (typeof currentSelectedClip !== 'undefined' && currentSelectedClip) {
+        selectedPublishClip = currentSelectedClip;
+      }
+      switchView('publishing');
+      loadPublishingView(selectedPublishClip?.clip_id);
+    }
+
+    async function loadPublishingView(preselectClipId) {
+      checkPublishChannels();
+      loadPublishHistory();
+
+      try {
+        const res = await fetch('/api/v1/clips');
+        cachedPublishClips = await res.json();
+        const select = document.getElementById('pubClipSelect');
+        if (select) {
+          select.innerHTML = '<option value="">Select a rendered or edited clip...</option>' +
+            cachedPublishClips.map(c => `
+              <option value="${c.clip_id}">${sanitizeHTML(c.title || c.candidate_data?.hook_title || c.clip_id)} (${(c.duration_seconds || 30).toFixed(1)}s)</option>
+            `).join('');
+
+          const targetId = preselectClipId || (selectedPublishClip ? selectedPublishClip.clip_id : (cachedPublishClips[0]?.clip_id || ''));
+          if (targetId) {
+            select.value = targetId;
+            onPublishClipSelected(targetId);
+            selectedBatchClipIds.add(targetId);
+          }
+        }
+        renderBatchCheckboxes();
+      } catch (err) {
+        console.error('Failed to load clips for publishing:', err);
+      }
+    }
+
+    async function checkPublishChannels() {
+      try {
+        const res = await fetch('/api/v1/publish/channels');
+        const data = await res.json();
+
+        // Populate destination YouTube channel dropdown
+        const channelSelect = document.getElementById('pubChannelSelect');
+        if (channelSelect && data.channels && data.channels.length > 0) {
+          channelSelect.innerHTML = data.channels.map(ch => `
+            <option value="${ch.channel_id}" ${ch.is_default ? 'selected' : ''}>${sanitizeHTML(ch.channel_title)} (${ch.channel_handle || ch.channel_id})</option>
+          `).join('');
+        }
+
+        // 1. YouTube Dedicated Channel
+        const yt = data.dedicated_youtube || {};
+        const ytBadge = document.getElementById('ytChannelBadge');
+        const ytTitle = document.getElementById('ytChannelTitle');
+        const ytMeta = document.getElementById('ytChannelMeta');
+        const ytAvatar = document.getElementById('ytChannelAvatar');
+        const btnConnect = document.getElementById('btnConnectGoogle');
+
+        const setBadge = document.getElementById('setGoogleStatusBadge');
+        const setTitle = document.getElementById('setGoogleTitle');
+        const setHandle = document.getElementById('setGoogleHandle');
+        const setAvatar = document.getElementById('setGoogleAvatar');
+
+        if (yt.connected) {
+          if (ytBadge) {
+            ytBadge.innerText = 'Connected & Isolated';
+            ytBadge.style.color = 'var(--emerald)';
+            ytBadge.style.background = 'rgba(16,185,129,0.1)';
+            ytBadge.style.borderColor = 'rgba(16,185,129,0.3)';
+          }
+          if (ytTitle) ytTitle.innerText = yt.channel_title || 'Dedicated YouTube Channel';
+          if (ytMeta) ytMeta.innerText = `${yt.channel_handle || '@AutoChannel'} • ${yt.subscriber_count ? Number(yt.subscriber_count).toLocaleString() + ' Subscribers' : 'Verified Channel'}`;
+          if (ytAvatar && yt.thumbnail_url) ytAvatar.src = yt.thumbnail_url;
+          if (btnConnect) btnConnect.innerText = 'Reconnect Channel';
+
+          if (setBadge) {
+            setBadge.innerText = 'Connected';
+            setBadge.style.color = 'var(--emerald)';
+          }
+          if (setTitle) setTitle.innerText = yt.channel_title || 'Dedicated Automation Channel';
+          if (setHandle) setHandle.innerText = `${yt.channel_handle || '@AutoShortsStudio'} • ${yt.subscriber_count ? Number(yt.subscriber_count).toLocaleString() + ' Subscribers' : 'Isolated'}`;
+          if (setAvatar && yt.thumbnail_url) setAvatar.src = yt.thumbnail_url;
+        } else {
+          if (ytBadge) {
+            ytBadge.innerText = 'Disconnected';
+            ytBadge.style.color = 'var(--rose)';
+            ytBadge.style.background = 'rgba(239,68,68,0.1)';
+            ytBadge.style.borderColor = 'rgba(239,68,68,0.3)';
+          }
+          if (ytTitle) ytTitle.innerText = 'No Dedicated Channel Connected';
+          if (ytMeta) ytMeta.innerText = 'Click Connect Google to link dedicated account';
+          if (btnConnect) btnConnect.innerText = 'Connect Google';
+
+          if (setBadge) {
+            setBadge.innerText = 'Disconnected';
+            setBadge.style.color = 'var(--rose)';
+          }
+          if (setTitle) setTitle.innerText = 'Dedicated Account Not Linked';
+          if (setHandle) setHandle.innerText = 'Connect via OAuth 2.0 to enable direct publishing';
+        }
+
+        // 2. OmniPost Gateway
+        const omni = data.omnipost_gateway || {};
+        const omniBadge = document.getElementById('omniGatewayBadge');
+        const omniReadyText = document.getElementById('omniReadyChannelsText');
+        if (omni.status === 'ready') {
+          if (omniBadge) {
+            omniBadge.innerText = 'Online (Port 3300)';
+            omniBadge.style.color = 'var(--emerald)';
+            omniBadge.style.background = 'rgba(16,185,129,0.1)';
+          }
+          if (omniReadyText) {
+            omniReadyText.innerText = `Channels: ${(omni.registered_drivers || ['YouTube', 'Instagram Reels', 'Facebook', 'LinkedIn']).join(', ')}`;
+          }
+        } else {
+          if (omniBadge) {
+            omniBadge.innerText = 'Standalone Hub';
+            omniBadge.style.color = 'var(--blue)';
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check publishing channels:', err);
+      }
+    }
+
+    function onPublishClipSelected(clipId) {
+      const clip = cachedPublishClips.find(c => c.clip_id === clipId);
+      if (!clip) return;
+      selectedPublishClip = clip;
+
+      const player = document.getElementById('pubVideoPlayer');
+      if (player) {
+        const src = clip.playback_url || clip.media_url || `/api/v1/clips/${clip.clip_id}/media`;
+        player.src = src;
+        player.load();
+      }
+
+      const titleInput = document.getElementById('pubTitleInput');
+      if (titleInput) {
+        titleInput.value = clip.title || clip.candidate_data?.hook_title || 'Autonomous Short';
+      }
+
+      const descInput = document.getElementById('pubDescInput');
+      if (descInput) {
+        const pkg = clip.caption_package || {};
+        descInput.value = pkg.full_copy_caption || pkg.platform_variants?.youtube_shorts || '';
+      }
+
+      const tagsInput = document.getElementById('pubTagsInput');
+      if (tagsInput) {
+        const pkg = clip.caption_package || {};
+        const tags = pkg.targeted_hashtags || ['shorts', 'viral', 'trending'];
+        tagsInput.value = tags.map(t => t.replace(/^#/, '')).join(', ');
+      }
+
+      const details = document.getElementById('pubClipDetails');
+      if (details) {
+        details.innerText = `Duration: ${(clip.duration_seconds || 30).toFixed(1)}s • Score: ★ ${Math.round(clip.score || 85)}/100 • Resolution: 1080x1920`;
+      }
+    }
+
+    function onPublishTargetChange(target) {
+      const channelRow = document.getElementById('pubChannelSelectRow');
+      if (channelRow) {
+        channelRow.style.display = target === 'youtube_dedicated' ? 'block' : 'none';
+      }
+    }
+
+    function toggleScheduleDate(isScheduled) {
+      const dateInput = document.getElementById('pubScheduleDate');
+      if (dateInput) {
+        dateInput.style.display = isScheduled ? 'block' : 'none';
+      }
+    }
+
+    async function submitPublishJob() {
+      const approvalCheckbox = document.getElementById('pubApprovalCheckbox');
+      if (!approvalCheckbox || !approvalCheckbox.checked) {
+        alert('⚠️ Explicit human authorization required.\n\nYou must inspect the video, review metadata, and check "I have reviewed the video..." before publishing.');
+        return;
+      }
+
+      let payload = {
+        target: document.getElementById('pubTargetSelect')?.value || 'youtube_dedicated',
+        channel_id: document.getElementById('pubChannelSelect')?.value || null,
+        thumbnail_path: (document.getElementById('pubThumbnailInput')?.value || '').trim() || null,
+        title: (document.getElementById('pubTitleInput')?.value || '').trim() || null,
+        description: (document.getElementById('pubDescInput')?.value || '').trim() || null,
+        tags: (document.getElementById('pubTagsInput')?.value || '').split(',').map(t => t.trim()).filter(Boolean),
+        approved_by_user: true
+      };
+
+      const isScheduled = document.querySelector('input[name="pubScheduleMode"]:checked')?.value === 'scheduled';
+      payload.scheduled_time = isScheduled ? (document.getElementById('pubScheduleDate')?.value || null) : null;
+
+      if (publishMode === 'batch') {
+        const selectedIds = Array.from(selectedBatchClipIds);
+        if (selectedIds.length === 0) {
+          alert('Please select at least one clip from the batch list to publish.');
+          return;
+        }
+        payload.clip_ids = selectedIds;
+      } else {
+        const clipSelect = document.getElementById('pubClipSelect');
+        const clipId = clipSelect?.value;
+        if (!clipId) {
+          alert('Please select a clip to publish.');
+          return;
+        }
+        payload.clip_id = clipId;
+      }
+
+      const btn = document.getElementById('btnExecutePublish');
+      if (btn) btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/v1/publish/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || 'Publication request failed');
+        }
+
+        const countMsg = payload.clip_ids ? `${payload.clip_ids.length} clips dispatched` : `Status: ${data.status}`;
+        showToast(`Publication submitted! ${countMsg}`);
+        approvalCheckbox.checked = false;
+        loadPublishHistory();
+      } catch (err) {
+        alert(`Publishing failed: ${err.message}`);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function loadPublishHistory() {
+      const tbody = document.getElementById('pubHistoryTableBody');
+      if (!tbody) return;
+
+      try {
+        const res = await fetch('/api/v1/publish/history');
+        const list = await res.json();
+
+        if (!list || list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No publication history records found yet.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = list.map(item => {
+          const isSuccess = item.status === 'DELIVERED';
+          const isFailed = item.status === 'FAILED';
+          const isSched = item.status === 'SCHEDULED';
+
+          const badgeColor = isSuccess ? 'var(--emerald)' : isFailed ? 'var(--rose)' : 'var(--amber)';
+          const badgeBg = isSuccess ? 'rgba(16,185,129,0.1)' : isFailed ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)';
+
+          const dateStr = item.timestamp ? new Date(item.timestamp).toLocaleString() : 'N/A';
+          const url = item.response_payload?.url || (item.response_payload?.video_id ? `https://youtube.com/shorts/${item.response_payload.video_id}` : '');
+          const details = url ? ('<a ' + 'href="' + encodeURI(url) + '" target="_blank" rel="noopener noreferrer" style="color: var(--blue); text-decoration: underline;">' + sanitizeHTML(url) + '</a>') : (item.response_payload?.error || 'Scheduled for release');
+
+          const actionBtn = isFailed ?
+            `<button class="btn btn-sm btn-secondary" onclick="retryPublishJob('${item.receipt_id}')" style="color: var(--amber);">Retry</button>` :
+            '<span style="color: var(--text-muted); font-size: 0.75rem;">—</span>';
+
+          return `
+            <tr>
+              <td style="font-family: var(--font-mono); font-size: 0.75rem;">${dateStr}</td>
+              <td style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${item.clip_id}</td>
+              <td style="font-weight: 600; font-size: 0.825rem;">${sanitizeHTML(item.response_payload?.title || 'Clip')}</td>
+              <td><span style="font-size: 0.75rem;">${item.target_mode === 'youtube_dedicated' ? 'YouTube Dedicated' : 'OmniPost Gateway'}</span></td>
+              <td><span class="brand-badge" style="color: ${badgeColor}; background: ${badgeBg}; border-color: ${badgeColor}33;">${item.status}</span></td>
+              <td style="font-size: 0.75rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${details}</td>
+              <td>${actionBtn}</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('Failed to load publishing history:', err);
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--rose); padding: 1.5rem;">Failed to load history ledger.</td></tr>';
+      }
+    }
+
+    async function retryPublishJob(receiptId) {
+      showToast('Retrying failed publishing job...');
+      try {
+        const res = await fetch(`/api/v1/publish/retry/${receiptId}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || 'Retry failed');
+        }
+        showToast(`Retry result: ${data.status}`);
+        loadPublishHistory();
+      } catch (err) {
+        alert(`Retry failed: ${err.message}`);
+      }
+    }
+
+    async function connectGoogleAccount() {
+      try {
+        const res = await fetch('/api/v1/auth/google/url');
+        const data = await res.json();
+        if (data.auth_url) {
+          const width = 600;
+          const height = 700;
+          const left = (window.innerWidth - width) / 2;
+          const top = (window.innerHeight - height) / 2;
+          window.open(data.auth_url, 'GoogleOAuthPopup', `width=${width},height=${height},top=${top},left=${left}`);
+        }
+      } catch (err) {
+        showToast('Failed to initialize Google authorization');
+      }
+    }
+
+    async function disconnectGoogleAccount() {
+      if (!confirm('Disconnect dedicated YouTube account? This will revoke access tokens.')) return;
+      try {
+        const res = await fetch('/api/v1/auth/google/disconnect', { method: 'POST' });
+        const data = await res.json();
+        showToast('Dedicated Google account disconnected');
+        checkPublishChannels();
+      } catch (err) {
+        showToast('Failed to disconnect Google account');
+      }
+    }
+
+    // Message listener for popup authorization callback
+    window.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'YOUTUBE_AUTH_SUCCESS') {
+        showToast('YouTube Channel connected: ' + (event.data.channel?.channel_title || 'Authorized'));
+        checkPublishChannels();
+      }
+    });
+
     // Initialization on window boot
     window.addEventListener('DOMContentLoaded', async () => {
       checkHealth();
       loadProjects();
-      // If we already have rendered clips on disk, load the newest ones into the showcase!
       loadRecentClips();
+
+      // Deep link support via tab parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      const tab = urlParams.get('tab');
+      if (tab) switchView(tab);
     });
   </script>
 </body>

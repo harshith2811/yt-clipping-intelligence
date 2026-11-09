@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment files
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+
+# Secret directories & credentials
+secrets/
+**/secrets/
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_ecdsa
+id_ed25519
+*service-account*.json
+*credentials*.json
+client_secret*.json
+
+# Sensitive client legal vault data
+web/data/submissions.json
+**/data/submissions.json
+*.sqlite
+*.sqlite3
+*.db
+
+# Build artifacts
+dist/
+**/dist/
+
+# Uploads & local media
+web/uploads/*
+!web/uploads/.gitkeep
+!web/uploads/media/.gitkeep
+omnipost-upload-staging/
+staging/
+tmp/
+temp/
+*.mp4
+*.mov
+*.webm
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+.web-portal.pid
