@@ -8,11 +8,29 @@ set -e
 
 # Ensure durable volume storage directories exist
 mkdir -p /app/data/assets \
+         /app/data/assets/flux \
          /app/data/heatmaps \
          /app/data/transcripts \
          /app/data/rendered_clips \
          /app/data/handoffs \
          /app/data/temp
+
+# Handle volume mount synchronization for /app/clips and /app/data/rendered_clips
+if [ -d /app/clips ] && [ ! -L /app/clips ] && grep -q " /app/clips " /proc/mounts 2>/dev/null; then
+  # Dedicated volume mounted at /app/clips; link rendered_clips into it
+  if [ ! -L /app/data/rendered_clips ]; then
+    rmdir /app/data/rendered_clips 2>/dev/null || true
+    if [ ! -d /app/data/rendered_clips ]; then
+      ln -sfn /app/clips /app/data/rendered_clips
+    fi
+  fi
+elif [ ! -e /app/clips ] || [ ! -L /app/clips ]; then
+  # Ensure /app/clips symlinks directly to /app/data/rendered_clips
+  rmdir /app/clips 2>/dev/null || true
+  if [ ! -d /app/clips ]; then
+    ln -sfn /app/data/rendered_clips /app/clips
+  fi
+fi
 
 MODE="${1:-studio}"
 
@@ -20,6 +38,14 @@ echo "==========================================================================
 echo " YouTube Clipping Intelligence Platform - Turnkey Live Production Container"
 echo " Time: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 echo " Mode: ${MODE}"
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+  GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -n1 || echo "NVIDIA CUDA GPU")
+  echo " Hardware: ${GPU_NAME} (NVENC & CUDA acceleration enabled)"
+  export USE_GPU="${USE_GPU:-1}"
+else
+  echo " Hardware: Standard Multi-Threaded CPU (Int8 Whisper & libx264 fallback)"
+  export USE_GPU="${USE_GPU:-0}"
+fi
 echo "================================================================================"
 
 # Trap termination signals for graceful container shutdown

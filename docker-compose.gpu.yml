@@ -16,8 +16,10 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
       - USE_GPU=1
+      - RENDER_VCODEC=h264_nvenc
+      - TRANSCRIPTION_DEVICE=cuda
 
-  clipping-daemon:
+  daemon:
     deploy:
       resources:
         reservations:
@@ -29,8 +31,10 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
       - USE_GPU=1
+      - RENDER_VCODEC=h264_nvenc
+      - TRANSCRIPTION_DEVICE=cuda
 
-  clipping-worker:
+  worker:
     deploy:
       resources:
         reservations:
@@ -42,3 +46,20 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
       - USE_GPU=1
+      - RENDER_VCODEC=h264_nvenc
+      - TRANSCRIPTION_DEVICE=cuda
+
+  mcp-server:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video, compute]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+      - USE_GPU=1
+      - RENDER_VCODEC=h264_nvenc
+      - TRANSCRIPTION_DEVICE=cuda

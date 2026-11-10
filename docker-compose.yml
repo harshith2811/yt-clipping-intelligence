@@ -16,6 +16,7 @@ services:
       - "8088:8088"
     volumes:
       - ./data:/app/data
+      - ./clips:/app/clips
     environment:
       - PYTHONUNBUFFERED=1
       - PORT=8000
@@ -25,6 +26,8 @@ services:
       - DEFAULT_LAYOUT_MODE=active_speaker
       - DEFAULT_SUBTITLE_PRESET=hormozi
       - POLL_INTERVAL=${POLL_INTERVAL:-300}
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
 
   # ==============================================================================
   # 24/7 Autonomous Discovery & Clipping Daemon (Optional Background Profile)
@@ -40,12 +43,15 @@ services:
     profiles: ["daemon", "full"]
     volumes:
       - ./data:/app/data
+      - ./clips:/app/clips
     environment:
       - PYTHONUNBUFFERED=1
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-flash-lite-latest}
       - POLL_INTERVAL=${POLL_INTERVAL:-300}
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
       - DEFAULT_LAYOUT_MODE=active_speaker
       - DEFAULT_SUBTITLE_PRESET=hormozi
 
@@ -63,12 +69,15 @@ services:
     profiles: ["worker", "full"]
     volumes:
       - ./data:/app/data
+      - ./clips:/app/clips
     environment:
       - PYTHONUNBUFFERED=1
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-flash-lite-latest}
       - POLL_INTERVAL=5.0
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
 
   # ==============================================================================
   # Model Context Protocol (MCP) Server (Optional MCP Profile)
@@ -84,8 +93,11 @@ services:
     profiles: ["mcp"]
     volumes:
       - ./data:/app/data
+      - ./clips:/app/clips
     environment:
       - PYTHONUNBUFFERED=1
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-flash-lite-latest}
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}

@@ -20,6 +20,11 @@ def test_docker_entrypoint_file_exists():
     assert "daemon)" in content
     assert "worker)" in content
     assert "mcp)" in content
+    assert "nvidia-smi" in content
+    assert "assets/flux" in content
+    assert "USE_GPU" in content
+    assert "/proc/mounts" in content
+    assert "ln -sfn" in content
 
 
 def test_dockerfiles_and_compose_specs():
@@ -27,18 +32,38 @@ def test_dockerfiles_and_compose_specs():
     dockerfile_path = os.path.join(root_dir, "Dockerfile")
     compose_path = os.path.join(root_dir, "docker-compose.yml")
     compose_gpu_path = os.path.join(root_dir, "docker-compose.gpu.yml")
+    requirements_path = os.path.join(root_dir, "requirements.txt")
 
     assert os.path.exists(dockerfile_path)
     assert os.path.exists(compose_path)
     assert os.path.exists(compose_gpu_path)
+    assert os.path.exists(requirements_path)
 
     df_content = open(dockerfile_path, "r", encoding="utf-8").read()
     assert "nvidia/cuda" in df_content or "python:" in df_content
     assert "prebake_models" in df_content
     assert "HEALTHCHECK" in df_content
+    assert "assets/flux" in df_content
+    assert 'VOLUME ["/app/data", "/app/clips"]' in df_content
+    assert "ln -sfn /app/data/rendered_clips /app/clips" in df_content
+
+    req_content = open(requirements_path, "r", encoding="utf-8").read()
+    assert "ultralytics" in req_content
+
+    compose_content = open(compose_path, "r", encoding="utf-8").read()
+    assert "studio:" in compose_content
+    assert "daemon:" in compose_content
+    assert "worker:" in compose_content
+    assert "./clips:/app/clips" in compose_content
+    assert "CLOUDFLARE_ACCOUNT_ID" in compose_content
 
     gpu_content = open(compose_gpu_path, "r", encoding="utf-8").read()
     assert "capabilities: [gpu, video, compute]" in gpu_content
+    assert "studio:" in gpu_content
+    assert "daemon:" in gpu_content
+    assert "worker:" in gpu_content
+    assert "mcp-server:" in gpu_content
+    assert "h264_nvenc" in gpu_content
 
 
 def test_model_prebake_yunet_verification():

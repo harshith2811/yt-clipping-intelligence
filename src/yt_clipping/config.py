@@ -38,6 +38,8 @@ class AppConfig:
     llm_api_base: Optional[str] = None
     llm_api_key: Optional[str] = None
     llm_model: str = "llama3"
+    cloudflare_account_id: Optional[str] = None
+    cloudflare_api_token: Optional[str] = None
 
     # Transcription configuration
     transcription_provider: str = "faster-whisper"  # "faster-whisper", "cloud", "test"
@@ -86,6 +88,8 @@ class AppConfig:
             "DATA_DIR": "base_data_dir",
             "ASSETS_DIR": "assets_dir",
             "OUTPUT_DIR": "output_dir",
+            "RENDERED_CLIPS_DIR": "output_dir",
+            "CLIPS_DIR": "output_dir",
             "TEMP_DIR": "temp_dir",
             "TRANSCRIPTS_DIR": "transcripts_dir",
             "HEATMAPS_DIR": "heatmaps_dir",
@@ -102,6 +106,10 @@ class AppConfig:
             "LLM_API_BASE": "llm_api_base",
             "LLM_API_KEY": "llm_api_key",
             "LLM_MODEL": "llm_model",
+            "CLOUDFLARE_ACCOUNT_ID": "cloudflare_account_id",
+            "CLOUDFLARE_API_TOKEN": "cloudflare_api_token",
+            "CF_ACCOUNT_ID": "cloudflare_account_id",
+            "CF_API_TOKEN": "cloudflare_api_token",
             "TRANSCRIPTION_PROVIDER": "transcription_provider",
             "TRANSCRIPTION_MODEL": "transcription_model",
             "TRANSCRIPTION_DEVICE": "transcription_device",
@@ -194,6 +202,7 @@ class AppConfig:
             "subtitle_style": self.subtitle_style,
             "discovery_interval": self.discovery_interval,
             "daily_quota_limit": self.daily_quota_limit,
+            "cloudflare_configured": bool(self.cloudflare_account_id and self.cloudflare_api_token),
         }
 
     @classmethod

@@ -41,8 +41,13 @@ logger = logging.getLogger(__name__)
 
 # Base directories
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-CLIPS_DIR = os.path.join(DATA_DIR, "rendered_clips")
+DATA_DIR = os.getenv("DATA_DIR", os.path.join(BASE_DIR, "data"))
+CLIPS_DIR = (
+    os.getenv("OUTPUT_DIR")
+    or os.getenv("RENDERED_CLIPS_DIR")
+    or os.getenv("CLIPS_DIR")
+    or os.path.join(DATA_DIR, "rendered_clips")
+)
 PROJECTS_DIR = os.path.join(DATA_DIR, "projects")
 TEMP_DIR = os.path.join(DATA_DIR, "temp")
 CACHE_DIR = os.path.join(DATA_DIR, "cache", "metadata")
@@ -53,6 +58,8 @@ for d in (CLIPS_DIR, PROJECTS_DIR, TEMP_DIR, CACHE_DIR):
 
 from ..auth.google_oauth import DedicatedYouTubeAuth
 from ..rendering.editor import VideoEditorEngine
+from ..rendering.flux_generator import FluxImageGenerator
+from ..detection.audio_energy import extract_pcm_from_file
 from ..publisher.omnipost import OmniPostPublisher
 from ..contracts.models import (
     RenderedClip,
@@ -72,6 +79,7 @@ job_manager = JobManager(db_path=DB_PATH)
 batch_manager = BatchQueueManager(storage_dir=DATA_DIR, db_path=DB_PATH)
 youtube_auth = DedicatedYouTubeAuth()
 video_editor = VideoEditorEngine(output_dir=CLIPS_DIR)
+flux_generator = FluxImageGenerator()
 publisher = OmniPostPublisher(db_path=DB_PATH, youtube_auth=youtube_auth)
 
 app = FastAPI(
@@ -133,6 +141,38 @@ class RenderRequest(BaseModel):
     enable_outro: bool = Field(True, description="Enable dedicated animated outro card with bell chime")
     outro_channel_name: Optional[str] = Field(None, description="Custom channel name for outro card")
     gpu: bool = Field(True, description="Use NVIDIA NVENC hardware acceleration if available")
+
+
+class FluxGenerateRequest(BaseModel):
+    prompt: str = Field(..., description="Visual scene prompt")
+    style_preset: Optional[str] = Field("cinematic_hook", description="Visual style preset")
+    width: Optional[int] = Field(768, description="Target pixel width")
+    height: Optional[int] = Field(1344, description="Target pixel height")
+    steps: Optional[int] = Field(4, description="Inference steps (1-8)")
+    animate_broll: Optional[bool] = Field(False, description="Render Ken Burns video clip")
+
+
+class FluxBRollRequest(BaseModel):
+    image_path: str = Field(..., description="Path to FLUX image")
+    duration: Optional[float] = Field(3.5, description="Video clip duration in seconds")
+    motion: Optional[str] = Field("zoom_in", description="Motion type: zoom_in | zoom_out | pan")
+
+
+class FluxAutoBRollRequest(BaseModel):
+    transcript_text: str = Field(..., description="Clip transcript dialogue to analyze")
+    max_concepts: Optional[int] = Field(3, description="Maximum number of concepts")
+    style_preset: Optional[str] = Field("cinematic_hook", description="Visual style preset")
+
+
+class FluxSettingsRequest(BaseModel):
+    account_id: str = Field(..., description="Cloudflare Account ID")
+    api_token: str = Field(..., description="Cloudflare API Token")
+
+
+class SavePosterRequest(BaseModel):
+    video_path: str = Field(..., description="Video path or filename")
+    timestamp: float = Field(0.0, description="Timestamp to capture")
+    clip_id: Optional[str] = Field(None, description="Clip ID to attach poster to")
 
 
 # ------------------------------------------------------------------------------
@@ -760,7 +800,12 @@ def _sanitize_clip_id(clip_id: str) -> str:
 
 def _assert_path_in_data_dir(file_path: str) -> str:
     resolved = os.path.abspath(file_path)
-    allowed_roots = [os.path.abspath(DATA_DIR)]
+    allowed_roots = [
+        os.path.abspath(DATA_DIR),
+        os.path.abspath(CLIPS_DIR),
+        os.path.abspath(os.path.join(BASE_DIR, "clips")),
+        os.path.abspath(flux_generator.output_dir),
+    ]
     if os.getenv("PYTEST_CURRENT_TEST"):
         import tempfile
         allowed_roots.append(os.path.abspath(tempfile.gettempdir()))
@@ -1099,6 +1144,173 @@ def api_editor_export(req: EditorExportRequest):
     except Exception as e:
         logger.error(f"Editor export failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/editor/waveform")
+def api_editor_waveform(req: EditorFrameRequest):
+    """Calculates downsampled audio waveform energy profile for timeline scrub bar."""
+    import numpy as np
+    resolved_path = _resolve_clip_path(req.file_path)
+    try:
+        pcm = extract_pcm_from_file(resolved_path)
+        if not pcm or len(pcm) < 3200:
+            return {"points": [0.25, 0.45, 0.75, 0.55, 0.35, 0.65, 0.85, 0.5, 0.2] * 8, "duration": 30.0}
+        samples = np.frombuffer(pcm, dtype=np.int16)
+        num_buckets = 100
+        bucket_size = max(1, len(samples) // num_buckets)
+        points = []
+        for i in range(num_buckets):
+            chunk = samples[i * bucket_size : (i + 1) * bucket_size]
+            if len(chunk) > 0:
+                rms = float(np.sqrt(np.mean(chunk.astype(np.float32) ** 2)))
+                points.append(min(1.0, round(rms / 12000.0, 3)))
+            else:
+                points.append(0.1)
+        duration = round(len(samples) / 16000.0, 2)
+        return {"points": points, "duration": duration}
+    except Exception as e:
+        logger.warning(f"Waveform calculation failed: {e}")
+        return {"points": [0.35] * 60, "duration": 0.0}
+
+
+@app.post("/api/v1/editor/save-poster")
+def api_save_poster(req: SavePosterRequest):
+    """Captures frame at timestamp and saves as high-res poster JPEG/PNG."""
+    resolved_path = _resolve_clip_path(req.video_path)
+    try:
+        frame_path = video_editor.extract_frame_preview(resolved_path, req.timestamp)
+        poster_filename = f"{req.clip_id or 'poster'}_{int(req.timestamp * 1000)}.jpg"
+        target_path = os.path.join(CLIPS_DIR, poster_filename)
+        shutil.copy2(frame_path, target_path)
+        return {
+            "status": "success",
+            "poster_path": target_path,
+            "poster_url": f"/clips/{poster_filename}",
+            "timestamp": req.timestamp,
+        }
+    except Exception as e:
+        logger.error(f"Save poster failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# Cloudflare Workers AI FLUX.1 Engine Endpoints
+# ==============================================================================
+
+@app.get("/api/v1/flux/status")
+def api_flux_status() -> Dict[str, Any]:
+    """Returns Cloudflare Workers AI FLUX.1 status and readiness."""
+    return flux_generator.get_status()
+
+
+@app.post("/api/v1/flux/generate")
+def api_flux_generate(req: FluxGenerateRequest) -> Dict[str, Any]:
+    """Generates visual asset from text prompt via Cloudflare FLUX.1 Schnell."""
+    try:
+        res = flux_generator.generate_image(
+            prompt=req.prompt,
+            style_preset=req.style_preset or "cinematic_hook",
+            width=req.width or 768,
+            height=req.height or 1344,
+            steps=req.steps or 4,
+        )
+        data = res.to_dict()
+        if req.animate_broll and res.success and os.path.exists(res.file_path):
+            base_name = os.path.splitext(os.path.basename(res.file_path))[0]
+            out_filename = f"{base_name}_broll.mp4"
+            out_path = os.path.join(CLIPS_DIR, out_filename)
+            clip_path = flux_generator.create_broll_clip(res.file_path, duration=3.5, output_path=out_path)
+            data["broll_video_path"] = clip_path
+            if clip_path and os.path.exists(clip_path):
+                data["broll_video_url"] = f"/clips/{out_filename}"
+        return data
+    except Exception as e:
+        logger.error(f"FLUX generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/flux/broll-clip")
+def api_flux_broll_clip(req: FluxBRollRequest) -> Dict[str, Any]:
+    """Renders a Ken Burns 9:16 vertical motion video clip from a FLUX image."""
+    resolved = None
+    if os.path.exists(req.image_path):
+        resolved = req.image_path
+    else:
+        flux_cand = os.path.join(flux_generator.output_dir, os.path.basename(req.image_path))
+        if os.path.exists(flux_cand):
+            resolved = flux_cand
+        else:
+            try:
+                resolved = _resolve_clip_path(req.image_path)
+            except Exception:
+                raise HTTPException(status_code=404, detail=f"Image source not found: {req.image_path}")
+
+    try:
+        base_name = os.path.splitext(os.path.basename(resolved))[0]
+        out_filename = f"{base_name}_broll.mp4"
+        out_path = os.path.join(CLIPS_DIR, out_filename)
+        clip_path = flux_generator.create_broll_clip(
+            image_path=resolved,
+            duration=req.duration or 3.5,
+            motion=req.motion or "zoom_in",
+            output_path=out_path,
+        )
+        if not clip_path or not os.path.exists(clip_path):
+            raise HTTPException(status_code=500, detail="Failed to create B-roll motion video clip.")
+        return {
+            "success": True,
+            "broll_video_path": clip_path,
+            "broll_video_url": f"/clips/{out_filename}",
+            "duration": req.duration or 3.5,
+            "motion": req.motion or "zoom_in",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"FLUX B-roll clip generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/flux/auto-broll")
+def api_flux_auto_broll(req: FluxAutoBRollRequest) -> Dict[str, Any]:
+    """Extracts visual concepts from transcript and generates FLUX visual cards."""
+    try:
+        concepts = FluxImageGenerator.extract_broll_concepts(
+            transcript_text=req.transcript_text,
+            max_concepts=req.max_concepts or 3,
+        )
+        generated_assets = []
+        for c in concepts:
+            res = flux_generator.generate_image(
+                prompt=c["prompt"],
+                style_preset=req.style_preset or c.get("style", "cinematic_hook"),
+            )
+            d = res.to_dict()
+            d["concept"] = c["concept"]
+            generated_assets.append(d)
+
+        return {
+            "success": True,
+            "count": len(generated_assets),
+            "assets": generated_assets,
+        }
+    except Exception as e:
+        logger.error(f"Auto B-roll error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/flux/settings")
+def api_flux_settings(req: FluxSettingsRequest) -> Dict[str, Any]:
+    """Updates Cloudflare Workers AI credentials for FLUX.1 image generation."""
+    flux_generator.account_id = req.account_id.strip()
+    flux_generator.api_token = req.api_token.strip()
+    os.environ["CLOUDFLARE_ACCOUNT_ID"] = flux_generator.account_id
+    os.environ["CLOUDFLARE_API_TOKEN"] = flux_generator.api_token
+    return {
+        "status": "success",
+        "configured": flux_generator.is_configured,
+        "message": "Cloudflare Workers AI credentials saved.",
+    }
 
 
 # ==============================================================================
