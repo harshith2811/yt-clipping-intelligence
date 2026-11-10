@@ -16,10 +16,29 @@
   <meta name="twitter:description" content="Autonomous clipping pipeline generating high-retention 9:16 vertical Shorts.">
   <meta name="twitter:image" content="/og-image.svg">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
+    /* Self-Hosted Ultra-Fast WOFF2 Fonts (Zero External Latency & 0-Warning Compliance) */
+    @font-face {
+      font-family: 'Plus Jakarta Sans';
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url('/static/fonts/plus-jakarta-sans-400.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Plus Jakarta Sans';
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+      src: url('/static/fonts/plus-jakarta-sans-600.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Plus Jakarta Sans';
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url('/static/fonts/plus-jakarta-sans-700.woff2') format('woff2');
+    }
     :root {
       --bg-root: #090a0f;
       --bg-panel: #11141c;
@@ -2204,6 +2223,244 @@
       vertical-align: middle;
       flex-shrink: 0;
     }
+  
+    /* Overnight Batch Live Banner & Modal Styles */
+    .batch-live-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.25rem;
+      padding: 0.85rem 1.2rem;
+      background: linear-gradient(90deg, rgba(88, 28, 135, 0.25) 0%, rgba(30, 27, 75, 0.4) 50%, rgba(15, 23, 42, 0.6) 100%);
+      border: 1px solid rgba(168, 85, 247, 0.35);
+      border-radius: 10px;
+      box-shadow: 0 8px 24px -4px rgba(147, 51, 234, 0.15);
+      backdrop-filter: blur(8px);
+      margin-bottom: 0.5rem;
+      animation: bannerSlideDown 0.2s ease-out;
+    }
+    @keyframes bannerSlideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .batch-live-left {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      min-width: 0;
+      flex: 1;
+    }
+    .batch-pulse-orb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #a855f7;
+      box-shadow: 0 0 10px #c084fc;
+      animation: pulseBatch 1.6s infinite ease-in-out;
+      flex-shrink: 0;
+    }
+    @keyframes pulseBatch {
+      0%, 100% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.35); opacity: 1; box-shadow: 0 0 16px #e9d5ff; }
+    }
+    .batch-live-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #f3e8ff;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .batch-live-subtitle {
+      font-size: 0.725rem;
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+    .batch-live-right {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      flex-shrink: 0;
+    }
+    .batch-live-bar-wrap {
+      width: 140px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .batch-live-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #a855f7, #3b82f6);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+    .batch-live-pct {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #c084fc;
+      min-width: 36px;
+      text-align: right;
+    }
+    .batch-cancel-btn {
+      font-size: 0.7rem;
+      padding: 0.25rem 0.55rem;
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #f87171;
+      background: rgba(239, 68, 68, 0.08);
+      cursor: pointer;
+    }
+    .batch-cancel-btn:hover {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: rgba(239, 68, 68, 0.6);
+      color: #fca5a5;
+    }
+
+    /* Overnight Modal */
+    .batch-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(8px);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      animation: cmdFadeIn 0.2s ease-out;
+    }
+    .batch-modal-dialog {
+      width: 100%;
+      max-width: 680px;
+      max-height: 88vh;
+      background: #0e111a;
+      border: 1px solid #2a3148;
+      border-radius: 14px;
+      box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.9), 0 0 40px rgba(168, 85, 247, 0.15);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .batch-modal-header {
+      padding: 1.1rem 1.4rem;
+      border-bottom: 1px solid #1a2030;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      background: rgba(168, 85, 247, 0.04);
+    }
+    .batch-modal-header h2 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0;
+    }
+    .batch-modal-header p {
+      font-size: 0.775rem;
+      color: var(--text-muted);
+      margin: 0.25rem 0 0 0;
+      line-height: 1.4;
+    }
+    .batch-modal-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.25rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0.2rem 0.4rem;
+      border-radius: 6px;
+    }
+    .batch-modal-close:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .batch-modal-body {
+      padding: 1.25rem 1.4rem;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .batch-info-box {
+      background: rgba(37, 99, 235, 0.08);
+      border: 1px solid rgba(37, 99, 235, 0.25);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-size: 0.75rem;
+      color: #93c5fd;
+      line-height: 1.45;
+      display: flex;
+      gap: 0.6rem;
+      align-items: flex-start;
+    }
+    .batch-video-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-height: 250px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .batch-video-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.55rem 0.75rem;
+      background: #141824;
+      border: 1px solid #1f2639;
+      border-radius: 8px;
+      transition: border-color 0.15s ease;
+    }
+    .batch-video-item:hover {
+      border-color: rgba(168, 85, 247, 0.4);
+    }
+    .batch-video-thumb {
+      width: 72px;
+      height: 40px;
+      object-fit: cover;
+      border-radius: 4px;
+      background: #000;
+      flex-shrink: 0;
+    }
+    .batch-video-details {
+      flex: 1;
+      min-width: 0;
+    }
+    .batch-video-title {
+      font-size: 0.775rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .batch-video-sub {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 2px;
+    }
+    .batch-modal-footer {
+      padding: 0.9rem 1.4rem;
+      border-top: 1px solid #1a2030;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0b0d14;
+    }
   </style>
 </head>
 <body>
@@ -2269,6 +2526,24 @@
     <!-- ============================================================== -->
     <div id="viewStudio" style="display: flex; flex-direction: column; gap: 1.5rem;">
 
+      <!-- Overnight Multi-Video Batch Queue Live Progress Banner -->
+      <div id="overnightBatchBanner" class="batch-live-banner" style="display: none;">
+        <div class="batch-live-left">
+          <div class="batch-pulse-orb" id="batchPulseOrb"></div>
+          <div style="min-width: 0;">
+            <div class="batch-live-title" id="batchBannerTitle">Overnight 10M+ Batch (Running)</div>
+            <div class="batch-live-subtitle" id="batchBannerSubtitle">Initializing batch queue...</div>
+          </div>
+        </div>
+        <div class="batch-live-right">
+          <div class="batch-live-bar-wrap">
+            <div class="batch-live-bar" id="batchBannerBar" style="width: 0%;"></div>
+          </div>
+          <span class="batch-live-pct" id="batchBannerPct">0%</span>
+          <button type="button" class="btn btn-secondary batch-cancel-btn" id="batchCancelBtn" onclick="cancelActiveBatch()">Cancel</button>
+        </div>
+      </div>
+
       <!-- Card 1: Video Ingestion & Action Bar -->
       <div class="card">
         <div class="card-header">
@@ -2301,7 +2576,13 @@
               <svg class="svg-icon" viewBox="0 0 24 24" style="color: var(--amber);"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
               <span>Top Trending from Channels &gt; 10M Subscribers</span>
             </div>
-            <span class="brand-badge" style="color: var(--blue); border-color: rgba(37,99,235,0.3); background: rgba(37,99,235,0.1);">Verified 10M+ Only</span>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <button type="button" class="btn btn-secondary" onclick="openOvernightBatchModal()" style="font-size: 0.72rem; padding: 0.25rem 0.65rem; display: inline-flex; align-items: center; gap: 0.35rem; border-color: rgba(168, 85, 247, 0.45); color: #c084fc; background: rgba(168, 85, 247, 0.08);" title="Configure overnight batch execution for top trending videos">
+                <svg class="svg-icon" viewBox="0 0 24 24" style="width: 14px; height: 14px; stroke-width: 2;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                <span>🌙 Overnight Batch (Top 10)</span>
+              </button>
+              <span class="brand-badge" style="color: var(--blue); border-color: rgba(37,99,235,0.3); background: rgba(37,99,235,0.1);">Verified 10M+ Only</span>
+            </div>
           </div>
           <div class="trending-tray" id="trendingTray">
             <!-- Populated dynamically via /api/v1/trending/top10m -->
@@ -3213,6 +3494,68 @@
     </div>
   </div>
 
+  <!-- Overnight Batch Preview & Launch Modal -->
+  <div class="batch-modal-overlay" id="overnightBatchModal" style="display: none;" role="dialog" aria-modal="true" aria-label="Overnight Batch Scheduler">
+    <div class="batch-modal-dialog">
+      <div class="batch-modal-header">
+        <div>
+          <h2>
+            <svg class="svg-icon" viewBox="0 0 24 24" style="color: #c084fc;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            <span>Overnight Multi-Video Batch Queue</span>
+          </h2>
+          <p>Autonomous background scheduler processes top 10M+ trending videos sequentially while you sleep.</p>
+        </div>
+        <button type="button" class="batch-modal-close" onclick="closeOvernightBatchModal()" aria-label="Close Overnight Batch Modal">&times;</button>
+      </div>
+
+      <div class="batch-modal-body">
+        <div class="batch-info-box">
+          <svg class="svg-icon" viewBox="0 0 24 24" style="color: var(--blue); flex-shrink: 0; width: 16px; height: 16px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <div>
+            <strong>GPU & Failure Safe:</strong> Videos process <em>one-by-one</em> to prevent GTX 1650 VRAM exhaustion. If any video encounters copyright or audio issues, it is safely isolated while the queue advances to the next video.
+          </div>
+        </div>
+
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-size: 0.8rem; font-weight: 600; color: #e2e8f0;">Select Videos to Queue (<span id="batchSelectedCount">10</span>/10):</span>
+            <button type="button" class="btn btn-secondary" onclick="toggleAllBatchVideos()" style="font-size: 0.675rem; padding: 0.15rem 0.45rem;">Toggle All</button>
+          </div>
+          <div class="batch-video-list" id="batchVideoList">
+            <div style="font-size: 0.75rem; color: var(--text-muted); padding: 0.5rem;">Loading videos from trending shelf...</div>
+          </div>
+        </div>
+
+        <div style="background: #11141c; border: 1px solid #1a2030; border-radius: 8px; padding: 0.75rem 1rem; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; font-size: 0.725rem;">
+          <div>
+            <div style="color: var(--text-muted);">Clips / Video</div>
+            <div style="font-weight: 600; color: #fff; margin-top: 2px;">3 Shorts</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted);">Framing Engine</div>
+            <div style="font-weight: 600; color: #fff; margin-top: 2px;">YuNet Gimbal 9:16</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted);">Subtitle Style</div>
+            <div style="font-weight: 600; color: #fff; margin-top: 2px;">Hormozi Pop</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="batch-modal-footer">
+        <div style="font-size: 0.725rem; color: var(--text-muted);">
+          Est. Yield: <strong style="color: #a855f7;" id="batchEstYield">~30 Shorts</strong> &bull; NVENC Accelerated
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="closeOvernightBatchModal()">Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="launchOvernightBatch()" style="background: linear-gradient(135deg, #9333ea, #2563eb); border: none;">
+            <span>🚀 Launch Overnight Batch</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Notification Toast -->
   <div class="toast" id="toast">
     <svg class="svg-icon toast-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -3545,6 +3888,7 @@
       try {
         const res = await fetch('/api/v1/trending/top10m?limit=10');
         const videos = await res.json();
+        cachedTrendingList = videos;
         if (!videos || videos.length === 0) {
           tray.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted); padding:0.5rem;">Offline catalog ready. Click a preset below.</div>';
           return;
@@ -3591,6 +3935,237 @@
       }
     }
 
+    // ============================================================================
+    // Overnight Multi-Video Batch Queue Frontend Controller
+    // ============================================================================
+    let activeBatchPollTimer = null;
+    let cachedTrendingList = [];
+
+    async function openOvernightBatchModal() {
+      SoundFX.playClick();
+      const modal = document.getElementById('overnightBatchModal');
+      if (!modal) return;
+      modal.style.display = 'flex';
+
+      // Load cached or fresh videos
+      const listEl = document.getElementById('batchVideoList');
+      if (!cachedTrendingList || cachedTrendingList.length === 0) {
+        try {
+          const res = await fetch('/api/v1/trending/top10m?limit=10');
+          cachedTrendingList = await res.json();
+        } catch (e) {
+          console.warn('Failed to load trending for modal:', e);
+        }
+      }
+
+      if (cachedTrendingList && cachedTrendingList.length > 0) {
+        listEl.innerHTML = cachedTrendingList.map((v, idx) => `
+          <label class="batch-video-item" style="cursor: pointer;">
+            <input type="checkbox" class="batch-video-checkbox" value="${v.video_id}" checked onchange="updateBatchModalCounts()">
+            <img src="${v.thumbnail_url || 'https://i.ytimg.com/vi/' + v.video_id + '/hqdefault.jpg'}" class="batch-video-thumb" width="72" height="40" alt="${sanitizeHTML(v.title)}">
+            <div class="batch-video-details">
+              <div class="batch-video-title">${idx + 1}. ${sanitizeHTML(v.title)}</div>
+              <div class="batch-video-sub">
+                <span>${sanitizeHTML(v.channel_name)}</span>
+                <span class="trending-subs-pill">${sanitizeHTML(v.channel_subscribers_formatted || '10M+')}</span>
+                <span>${v.duration_formatted || '00:00'}</span>
+              </div>
+            </div>
+          </label>
+        `).join('');
+      } else {
+        listEl.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted); padding:0.5rem;">Preset videos ready for queue.</div>';
+      }
+      updateBatchModalCounts();
+    }
+
+    function closeOvernightBatchModal() {
+      SoundFX.playClick();
+      const modal = document.getElementById('overnightBatchModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function updateBatchModalCounts() {
+      const boxes = document.querySelectorAll('.batch-video-checkbox');
+      const checked = Array.from(boxes).filter(b => b.checked);
+      const countEl = document.getElementById('batchSelectedCount');
+      if (countEl) countEl.innerText = checked.length;
+      const yieldEl = document.getElementById('batchEstYield');
+      if (yieldEl) yieldEl.innerText = `~${checked.length * 3} Shorts`;
+    }
+
+    function toggleAllBatchVideos() {
+      const boxes = document.querySelectorAll('.batch-video-checkbox');
+      const allChecked = Array.from(boxes).every(b => b.checked);
+      boxes.forEach(b => { b.checked = !allChecked; });
+      updateBatchModalCounts();
+    }
+
+    async function launchOvernightBatch() {
+      SoundFX.playSuccess();
+      const boxes = document.querySelectorAll('.batch-video-checkbox:checked');
+      const videoIds = Array.from(boxes).map(b => b.value);
+
+      if (videoIds.length === 0) {
+        showToast('Please select at least 1 video for overnight batch.');
+        return;
+      }
+
+      closeOvernightBatchModal();
+      showToast(`Launching overnight batch for ${videoIds.length} videos...`);
+
+      const milkingYieldEl = document.getElementById('milkingYield');
+      const framingModeEl = document.getElementById('framingMode');
+      const subtitlePresetEl = document.getElementById('subtitlePreset');
+      const optPacingEl = document.getElementById('optPacing');
+      const optOutroEl = document.getElementById('optOutro');
+
+      const payload = {
+        video_ids: videoIds,
+        name: `Overnight 10M+ Batch (${videoIds.length} Videos)`,
+        max_clips: milkingYieldEl ? parseInt(milkingYieldEl.value, 10) : 3,
+        layout: framingModeEl ? framingModeEl.value : 'active_speaker',
+        subtitle_preset: subtitlePresetEl ? subtitlePresetEl.value : 'hormozi',
+        enable_polish: optPacingEl ? optPacingEl.checked : true,
+        enable_outro: optOutroEl ? optOutroEl.checked : true,
+        gpu: true
+      };
+
+      try {
+        const res = await fetch('/api/v1/batch/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast(`Overnight batch queued! Processing ${videoIds.length} videos consecutively.`);
+          renderActiveBatchBanner(data);
+          startBatchPolling();
+        } else {
+          showToast(`Failed to launch batch: ${data.detail || 'Unknown error'}`);
+        }
+      } catch (err) {
+        showToast(`Batch start failed: ${err.message}`);
+      }
+    }
+
+    function renderActiveBatchBanner(batch) {
+      const banner = document.getElementById('overnightBatchBanner');
+      if (!banner) return;
+
+      if (!batch || batch.status === 'idle') {
+        banner.style.display = 'none';
+        return;
+      }
+
+      banner.style.display = 'flex';
+      const titleEl = document.getElementById('batchBannerTitle');
+      const subEl = document.getElementById('batchBannerSubtitle');
+      const barEl = document.getElementById('batchBannerBar');
+      const pctEl = document.getElementById('batchBannerPct');
+      const cancelBtn = document.getElementById('batchCancelBtn');
+      const pulseOrb = document.getElementById('batchPulseOrb');
+
+      const isRunning = batch.status === 'RUNNING';
+      const isCompleted = batch.status === 'COMPLETED';
+      const isCancelled = batch.status === 'CANCELLED';
+
+      if (isRunning) {
+        const curIdx = (batch.current_video_index || 0) + 1;
+        const total = batch.total_videos || 10;
+        const subPct = (batch.current_video_progress || 0) / 100;
+        const overall = Math.min(100, Math.round((((curIdx - 1) + subPct) / total) * 100));
+
+        if (titleEl) titleEl.innerText = `🌙 Overnight Batch Active (${curIdx}/${total}: ${batch.current_video_channel || '10M+ Creator'})`;
+        if (subEl) subEl.innerText = `${batch.current_video_title || 'Rendering'} • ${batch.current_stage || 'Processing'} • ${batch.total_clips_generated || 0} Shorts Generated`;
+        if (barEl) barEl.style.width = `${overall}%`;
+        if (pctEl) pctEl.innerText = `${overall}%`;
+        if (cancelBtn) {
+          cancelBtn.style.display = 'inline-block';
+          cancelBtn.innerText = 'Cancel';
+        }
+        if (pulseOrb) pulseOrb.style.display = 'block';
+      } else if (isCompleted) {
+        if (titleEl) titleEl.innerText = `🎉 Overnight Batch Completed (${batch.completed_videos}/${batch.total_videos} Videos)`;
+        if (subEl) subEl.innerText = `All videos processed cleanly! ${batch.total_clips_generated} solid vertical Shorts saved to project history.`;
+        if (barEl) barEl.style.width = '100%';
+        if (pctEl) pctEl.innerText = '100%';
+        if (cancelBtn) {
+          cancelBtn.style.display = 'inline-block';
+          cancelBtn.innerText = 'Dismiss';
+          cancelBtn.onclick = () => { banner.style.display = 'none'; };
+        }
+        if (pulseOrb) pulseOrb.style.display = 'none';
+      } else if (isCancelled) {
+        if (titleEl) titleEl.innerText = `🛑 Overnight Batch Cancelled (${batch.completed_videos}/${batch.total_videos} Processed)`;
+        if (subEl) subEl.innerText = `${batch.total_clips_generated} Shorts generated before cancellation.`;
+        if (cancelBtn) {
+          cancelBtn.style.display = 'inline-block';
+          cancelBtn.innerText = 'Dismiss';
+          cancelBtn.onclick = () => { banner.style.display = 'none'; };
+        }
+        if (pulseOrb) pulseOrb.style.display = 'none';
+      }
+    }
+
+    function startBatchPolling() {
+      if (activeBatchPollTimer) clearInterval(activeBatchPollTimer);
+      activeBatchPollTimer = setInterval(pollBatchStatus, 2500);
+    }
+
+    async function pollBatchStatus() {
+      try {
+        const res = await fetch('/api/v1/batch/status');
+        if (!res.ok) return;
+        const batch = await res.json();
+        renderActiveBatchBanner(batch);
+
+        if (batch.status === 'COMPLETED' || batch.status === 'CANCELLED' || batch.status === 'idle') {
+          if (activeBatchPollTimer) {
+            clearInterval(activeBatchPollTimer);
+            activeBatchPollTimer = null;
+          }
+          if (batch.status === 'COMPLETED') {
+            SoundFX.playSuccess();
+            showToast(`Overnight batch finished! ${batch.total_clips_generated} Shorts created.`);
+          }
+        }
+      } catch (e) {
+        console.warn('Batch poll error:', e);
+      }
+    }
+
+    async function cancelActiveBatch() {
+      SoundFX.playClick();
+      try {
+        const res = await fetch('/api/v1/batch/cancel', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'cancelled') {
+          showToast('Overnight batch cancellation requested.');
+          pollBatchStatus();
+        } else {
+          showToast(data.message || 'No active batch to cancel.');
+        }
+      } catch (e) {
+        showToast(`Cancel failed: ${e.message}`);
+      }
+    }
+
+    // Check batch status on boot
+    async function checkActiveBatchStatus() {
+      try {
+        const res = await fetch('/api/v1/batch/status');
+        if (res.ok) {
+          const batch = await res.json();
+          if (batch && batch.status === 'RUNNING') {
+            renderActiveBatchBanner(batch);
+            startBatchPolling();
+          }
+        }
+      } catch (e) {}
+    }
+
     // Waveform Track & Modal Event Listeners
     document.addEventListener('DOMContentLoaded', () => {
       const track = document.getElementById('waveformTrack');
@@ -3615,6 +4190,7 @@
       }
       const overlay = document.getElementById('cmdOverlay');
       loadTrending10M();
+      checkActiveBatchStatus();
       if (overlay) {
         overlay.addEventListener('click', (e) => {
           if (e.target === overlay) closeCommandPalette();

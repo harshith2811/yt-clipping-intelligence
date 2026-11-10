@@ -33,6 +33,7 @@ from ..cli.commands.pipeline import build_pipeline
 from ..discovery.video_metadata import VideoMetadataService, EnrichedVideoInfo, normalize_youtube_url
 from ..scoring.caption_synthesizer import CaptionSynthesizer, ShortCaptionPackage, ClipIntelligence
 from ..orchestration.project_store import ProjectStore, ProjectRecord, ClipSidecarRecord
+from ..orchestration.batch_queue import BatchQueueManager, BatchSession, BatchStatus
 from ..orchestration.job_manager import JobManager, RenderJobStatus, JobRecord
 from ..qa.verifier import validate_rendered_short
 
@@ -68,6 +69,7 @@ metadata_service = VideoMetadataService(cache_dir=CACHE_DIR)
 caption_synthesizer = CaptionSynthesizer()
 project_store = ProjectStore(base_data_dir=DATA_DIR)
 job_manager = JobManager(db_path=DB_PATH)
+batch_manager = BatchQueueManager(storage_dir=DATA_DIR, db_path=DB_PATH)
 youtube_auth = DedicatedYouTubeAuth()
 video_editor = VideoEditorEngine(output_dir=CLIPS_DIR)
 publisher = OmniPostPublisher(db_path=DB_PATH, youtube_auth=youtube_auth)
@@ -89,6 +91,11 @@ app.add_middleware(
 # Mount rendered clips static directory for instant playback
 app.mount("/clips", StaticFiles(directory=CLIPS_DIR), name="clips")
 
+# Mount self-hosted static assets (WOFF2 fonts, icons, banners)
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(STATIC_DIR, exist_ok=True)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 # In-memory dictionary for backwards-compatibility with tests referencing server.active_render_jobs
 active_render_jobs: Dict[str, Dict[str, Any]] = {}
 
@@ -104,6 +111,17 @@ class PreviewRequest(BaseModel):
     video_id_or_url: str = Field(..., description="YouTube video ID or URL")
     min_duration: float = Field(15.0, description="Minimum clip duration in seconds")
     max_duration: float = Field(60.0, description="Maximum clip duration in seconds")
+
+
+class BatchStartRequest(BaseModel):
+    video_ids: Optional[List[str]] = None
+    name: Optional[str] = "Overnight 10M+ Trending Batch"
+    max_clips: Optional[int] = 3
+    layout: Optional[str] = "active_speaker"
+    subtitle_preset: Optional[str] = "hormozi"
+    enable_polish: Optional[bool] = True
+    enable_outro: Optional[bool] = True
+    gpu: Optional[bool] = True
 
 
 class RenderRequest(BaseModel):
@@ -343,143 +361,142 @@ def api_preview(req: PreviewRequest) -> Dict[str, Any]:
     }
 
 
-def _run_render_worker(task_id: str, req: RenderRequest, video_id: str) -> None:
-    """Asynchronous background rendering worker with staged progress, cancellation, and validation."""
-    job_manager.update_progress(
-        job_id=task_id,
-        status=RenderJobStatus.DISCOVERING.value,
-        progress=15,
-        current_stage="discovering",
-        message="Resolving source metadata & verifying content rights...",
-    )
-    # Sync in-memory dict
-    if task_id in active_render_jobs:
-        active_render_jobs[task_id]["status"] = "IN_PROGRESS"
-        active_render_jobs[task_id]["progress"] = 15
-        active_render_jobs[task_id]["message"] = "Initializing pipeline & verifying content rights..."
+def _render_video_pipeline(
+    video_id: str,
+    config: Dict[str, Any],
+    progress_cb: Optional[Callable[[int, str], None]] = None,
+) -> List[Dict[str, Any]]:
+    """Core rendering routine used by single job rendering and overnight batch runs."""
+    if progress_cb:
+        progress_cb(15, "Resolving metadata & verifying content rights...")
 
+    video_info = None
     try:
-        # Check cancellation
-        if job_manager.is_cancelled(task_id):
-            logger.info(f"Job {task_id} cancelled during discovery.")
-            return
+        video_info = metadata_service.get_metadata(video_id)
+    except Exception:
+        pass
 
-        # 1. Retrieve metadata & initialize project
-        video_info = None
-        try:
-            video_info = metadata_service.get_metadata(video_id)
-        except Exception:
-            pass
+    project = project_store.create_or_get_project(video_id, source_metadata=video_info)
 
-        project = project_store.create_or_get_project(video_id, source_metadata=video_info)
+    policy = LocalRightsPolicy(os.path.join(DATA_DIR, "rights_ledger.json"), db_path=DB_PATH)
+    manifest = policy.check_rights(video_id)
+    if not policy.verify_rights(manifest):
+        policy.register_rights(
+            video_id=video_id,
+            basis="OPERATOR_ASSET",
+            owner=video_info.channel_title if video_info else "Studio Operator",
+            audit_notes="Auto-registered via Video Pipeline",
+        )
 
-        policy = LocalRightsPolicy(os.path.join(DATA_DIR, "rights_ledger.json"), db_path=DB_PATH)
-        manifest = policy.check_rights(video_id)
-        if not policy.verify_rights(manifest):
-            policy.register_rights(
-                video_id=video_id,
-                basis="OPERATOR_ASSET",
-                owner=video_info.channel_title if video_info else "Studio Operator",
-                audit_notes="Auto-registered via Web Studio Render",
+    max_clips = config.get("max_clips", 3)
+    layout = config.get("layout", "active_speaker")
+    subtitle_preset = config.get("subtitle_preset", "hormozi")
+    enable_outro = config.get("enable_outro", True)
+    enable_polish = config.get("enable_polish", True)
+    gpu = config.get("gpu", True)
+    outro_channel = config.get("outro_channel_name") or (video_info.channel_title if video_info else None)
+
+    if progress_cb:
+        progress_cb(40, f"Rendering top {max_clips} vertical Shorts with FFmpeg & face tracking...")
+
+    pipeline = build_pipeline(output_dir=CLIPS_DIR)
+    vcodec = "h264_nvenc" if gpu else "libx264"
+    profile = RenderProfile(
+        layout_mode=layout,
+        vcodec=vcodec,
+        subtitle_preset=subtitle_preset,
+        enable_outro_card=enable_outro,
+        outro_duration=2.5,
+        outro_channel_name=outro_channel,
+        enable_pacing_polish=enable_polish,
+    )
+
+    completed_jobs = pipeline.process_video_multi(
+        video_id=video_id,
+        max_clips=max_clips,
+        profile=profile,
+        dry_run=True,
+    )
+
+    if progress_cb:
+        progress_cb(85, "Executing QA validation & saving clip sidecars...")
+
+    clips_out = []
+    for j in completed_jobs:
+        if j.rendered_clip and os.path.exists(j.rendered_clip.file_path):
+            clip_path = j.rendered_clip.file_path
+            fname = os.path.basename(clip_path)
+
+            qa_result = validate_rendered_short(
+                clip_path,
+                expected_duration=j.candidate.duration_seconds if j.candidate else None,
             )
 
+            caption_pkg = caption_synthesizer.generate_caption_package(j.candidate, video_info) if j.candidate else None
+            intelligence = caption_synthesizer.explain_clip(j.candidate, video_info) if j.candidate else None
+
+            sidecar = ClipSidecarRecord(
+                clip_id=j.job_id,
+                project_id=project.project_id,
+                video_id=video_id,
+                file_path=clip_path,
+                relative_url=f"/clips/{fname}",
+                start_seconds=j.candidate.start_seconds if j.candidate else 0.0,
+                end_seconds=j.candidate.end_seconds if j.candidate else 0.0,
+                duration_seconds=j.candidate.duration_seconds if j.candidate else 0.0,
+                score=j.candidate.score if j.candidate else 0.0,
+                candidate_data=j.candidate.to_dict() if j.candidate else {},
+                source_metadata=video_info.to_dict() if video_info else {},
+                intelligence=intelligence.to_dict() if intelligence else {},
+                caption_package=caption_pkg.to_dict() if caption_pkg else {},
+                render_settings=profile.to_dict(),
+                file_size_bytes=os.path.getsize(clip_path),
+                qa_report=qa_result,
+                status="COMPLETED" if qa_result.get("valid", True) else "VALIDATION_FAILED",
+            )
+            project_store.save_clip_sidecar(sidecar)
+
+            clips_out.append({
+                "job_id": j.job_id,
+                "clip_id": j.job_id,
+                "filename": fname,
+                "url": f"/clips/{fname}",
+                "file_path": clip_path,
+                "duration": round(j.candidate.duration_seconds, 1) if j.candidate else 0.0,
+                "score": round(j.candidate.score, 1) if j.candidate else 0.0,
+                "hook_title": caption_pkg.hook_title if caption_pkg else (j.candidate.hook_title if j.candidate else ""),
+                "file_size_mb": round(os.path.getsize(clip_path) / (1024 * 1024), 2),
+                "caption_package": caption_pkg.to_dict() if caption_pkg else {},
+                "intelligence": intelligence.to_dict() if intelligence else {},
+                "qa_status": qa_result.get("status", "PASSED"),
+            })
+
+    if progress_cb:
+        progress_cb(100, f"Generated {len(clips_out)} solid Shorts.")
+
+    return clips_out
+
+
+def _run_render_worker(task_id: str, req: RenderRequest, video_id: str) -> None:
+    """Asynchronous background rendering worker with staged progress, cancellation, and validation."""
+    def sub_progress(p: int, msg: str) -> None:
         if job_manager.is_cancelled(task_id):
             return
-
-        # 2. Pipeline processing
+        stage = "rendering" if p < 80 else ("validating" if p < 100 else "completed")
         job_manager.update_progress(
             job_id=task_id,
-            status=RenderJobStatus.RENDERING.value,
-            progress=40,
-            current_stage="rendering",
-            message=f"Rendering top {req.max_clips} vertical Shorts with FFmpeg & face tracking...",
+            status=stage,
+            progress=p,
+            current_stage=stage,
+            message=msg,
         )
         if task_id in active_render_jobs:
-            active_render_jobs[task_id]["progress"] = 40
-            active_render_jobs[task_id]["message"] = f"Milking top {req.max_clips} solid shorts with kinematic face tracking..."
+            active_render_jobs[task_id]["progress"] = p
+            active_render_jobs[task_id]["message"] = msg
 
-        pipeline = build_pipeline(output_dir=CLIPS_DIR)
-        vcodec = "h264_nvenc" if req.gpu else "libx264"
-        profile = RenderProfile(
-            layout_mode=req.layout,
-            vcodec=vcodec,
-            subtitle_preset=req.subtitle_preset,
-            enable_outro_card=req.enable_outro,
-            outro_duration=2.5,
-            outro_channel_name=req.outro_channel_name or (video_info.channel_title if video_info else None),
-            enable_pacing_polish=req.enable_polish,
-        )
-
-        completed_jobs = pipeline.process_video_multi(
-            video_id=video_id,
-            max_clips=req.max_clips,
-            profile=profile,
-            dry_run=True,
-        )
-
-        if job_manager.is_cancelled(task_id):
-            return
-
-        # 3. Post-Render Quality Assurance & Sidecar Persistence
-        job_manager.update_progress(
-            job_id=task_id,
-            status=RenderJobStatus.VALIDATING.value,
-            progress=85,
-            current_stage="validating",
-            message="Executing post-render quality assurance & saving sidecars...",
-        )
-
-        clips_out = []
-        for j in completed_jobs:
-            if j.rendered_clip and os.path.exists(j.rendered_clip.file_path):
-                clip_path = j.rendered_clip.file_path
-                fname = os.path.basename(clip_path)
-
-                # Automated QA Validation
-                qa_result = validate_rendered_short(clip_path, expected_duration=j.candidate.duration_seconds if j.candidate else None)
-
-                # Synthesize social caption package and intelligence
-                caption_pkg = caption_synthesizer.generate_caption_package(j.candidate, video_info) if j.candidate else None
-                intelligence = caption_synthesizer.explain_clip(j.candidate, video_info) if j.candidate else None
-
-                # Persist sidecar
-                sidecar = ClipSidecarRecord(
-                    clip_id=j.job_id,
-                    project_id=project.project_id,
-                    video_id=video_id,
-                    file_path=clip_path,
-                    relative_url=f"/clips/{fname}",
-                    start_seconds=j.candidate.start_seconds if j.candidate else 0.0,
-                    end_seconds=j.candidate.end_seconds if j.candidate else 0.0,
-                    duration_seconds=j.candidate.duration_seconds if j.candidate else 0.0,
-                    score=j.candidate.score if j.candidate else 0.0,
-                    candidate_data=j.candidate.to_dict() if j.candidate else {},
-                    source_metadata=video_info.to_dict() if video_info else {},
-                    intelligence=intelligence.to_dict() if intelligence else {},
-                    caption_package=caption_pkg.to_dict() if caption_pkg else {},
-                    render_settings=profile.to_dict(),
-                    file_size_bytes=os.path.getsize(clip_path),
-                    qa_report=qa_result,
-                    status="COMPLETED" if qa_result.get("valid", True) else "VALIDATION_FAILED",
-                )
-                project_store.save_clip_sidecar(sidecar)
-
-                clips_out.append({
-                    "job_id": j.job_id,
-                    "clip_id": j.job_id,
-                    "filename": fname,
-                    "url": f"/clips/{fname}",
-                    "file_path": clip_path,
-                    "duration": round(j.candidate.duration_seconds, 1) if j.candidate else 0.0,
-                    "score": round(j.candidate.score, 1) if j.candidate else 0.0,
-                    "hook_title": caption_pkg.hook_title if caption_pkg else (j.candidate.hook_title if j.candidate else ""),
-                    "file_size_mb": round(os.path.getsize(clip_path) / (1024 * 1024), 2),
-                    "caption_package": caption_pkg.to_dict() if caption_pkg else {},
-                    "intelligence": intelligence.to_dict() if intelligence else {},
-                    "qa_status": qa_result.get("status", "PASSED"),
-                })
-
-        # 4. Completion
+    try:
+        cfg = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+        clips_out = _render_video_pipeline(video_id, cfg, sub_progress)
         if not clips_out:
             job_manager.update_progress(
                 job_id=task_id,
@@ -499,29 +516,35 @@ def _run_render_worker(task_id: str, req: RenderRequest, video_id: str) -> None:
             status=RenderJobStatus.COMPLETED.value,
             progress=100,
             current_stage="completed",
-            message=f"Successfully rendered {len(clips_out)} solid Shorts!",
+            message=f"Rendering complete! {len(clips_out)} solid shorts generated and verified.",
             clips=clips_out,
         )
-
         if task_id in active_render_jobs:
-            active_render_jobs[task_id]["progress"] = 100
             active_render_jobs[task_id]["status"] = "COMPLETED"
-            active_render_jobs[task_id]["message"] = f"Successfully rendered {len(clips_out)} solid Shorts!"
+            active_render_jobs[task_id]["progress"] = 100
             active_render_jobs[task_id]["clips"] = clips_out
-
+            active_render_jobs[task_id]["message"] = f"Batch rendering complete. {len(clips_out)} solid shorts generated!"
     except Exception as e:
-        logger.error(f"Render failed: {e}")
+        logger.error(f"Render failed for task {task_id}: {e}")
         job_manager.update_progress(
             job_id=task_id,
             status=RenderJobStatus.FAILED.value,
+            progress=100,
             current_stage="failed",
-            message=f"Render execution error: {e}",
+            message=f"Rendering pipeline failed: {e}",
             error=str(e),
         )
         if task_id in active_render_jobs:
             active_render_jobs[task_id]["status"] = "FAILED"
             active_render_jobs[task_id]["error"] = str(e)
 
+
+def _execute_batch_background(batch_id: str) -> None:
+    """Worker entry point for overnight batch execution."""
+    def _render_wrapper(vid: str, cfg: Dict[str, Any], progress_cb: Callable[[int, str], None]) -> List[Dict[str, Any]]:
+        return _render_video_pipeline(vid, cfg, progress_cb)
+
+    batch_manager.run_batch_worker(batch_id, _render_wrapper)
 
 @app.post("/api/v1/render")
 def api_render(req: RenderRequest, bg_tasks: BackgroundTasks) -> Dict[str, Any]:
@@ -1378,6 +1401,94 @@ async def custom_404_handler(request: Request, exc: Exception):
     return HTMLResponse(content=html_404, status_code=404)
 
 
+# ------------------------------------------------------------------------------
+# Overnight Multi-Video Batch Queue Endpoints
+# ------------------------------------------------------------------------------
+
+@app.post("/api/v1/batch/start")
+def api_batch_start(req: BatchStartRequest, bg_tasks: BackgroundTasks) -> Dict[str, Any]:
+    """Launches an autonomous overnight multi-video batch queue."""
+    videos_to_queue = []
+    if req.video_ids and len(req.video_ids) > 0:
+        for vid in req.video_ids:
+            try:
+                clean_id, clean_url = normalize_youtube_url(vid)
+                meta = None
+                try:
+                    meta = metadata_service.get_metadata(clean_id)
+                except Exception:
+                    pass
+                videos_to_queue.append({
+                    "video_id": clean_id,
+                    "url": clean_url,
+                    "title": meta.title if meta else f"YouTube Video ({clean_id})",
+                    "channel_name": meta.channel_title if meta else "YouTube Creator",
+                    "channel_subscribers_formatted": "10M+",
+                    "thumbnail_url": meta.thumbnail_url if meta else f"https://i.ytimg.com/vi/{clean_id}/hqdefault.jpg",
+                    "duration_seconds": meta.duration if meta else 0.0,
+                })
+            except Exception:
+                continue
+    else:
+        # Auto-fetch top 10 from 10M+ trending fetcher
+        try:
+            from top_trending_videos_in_youtube import TopTrending10MFetcher
+            fetcher = TopTrending10MFetcher()
+            trending_list = fetcher.get_top_trending_10m_list(limit=10)
+            videos_to_queue = [v.to_dict() for v in trending_list]
+        except Exception as e:
+            logger.warning(f"Error auto-populating 10M trending videos for batch: {e}")
+
+    if not videos_to_queue:
+        raise HTTPException(status_code=400, detail="No valid videos found to queue for overnight batch.")
+
+    render_cfg = {
+        "max_clips": req.max_clips or 3,
+        "layout": req.layout or "active_speaker",
+        "subtitle_preset": req.subtitle_preset or "hormozi",
+        "enable_polish": True if req.enable_polish is None else req.enable_polish,
+        "enable_outro": True if req.enable_outro is None else req.enable_outro,
+        "gpu": True if req.gpu is None else req.gpu,
+    }
+
+    session = batch_manager.create_batch(
+        videos=videos_to_queue,
+        render_config=render_cfg,
+        name=req.name or "Overnight 10M+ Trending Batch",
+    )
+
+    bg_tasks.add_task(_execute_batch_background, session.batch_id)
+    return session.to_dict()
+
+
+@app.get("/api/v1/batch/status")
+def api_batch_status() -> Dict[str, Any]:
+    """Returns the live status of the active or most recent overnight batch queue."""
+    active = batch_manager.get_active_batch()
+    if active:
+        return active.to_dict()
+    recent = batch_manager.list_batches(limit=1)
+    if recent:
+        return recent[0].to_dict()
+    return {"status": "idle", "message": "No overnight batch runs in history."}
+
+
+@app.post("/api/v1/batch/cancel")
+def api_batch_cancel() -> Dict[str, Any]:
+    """Gracefully cancels any running overnight batch session."""
+    active = batch_manager.get_active_batch()
+    if not active:
+        return {"status": "idle", "message": "No active batch running."}
+    success = batch_manager.cancel_batch(active.batch_id)
+    return {"status": "cancelled" if success else "failed", "batch_id": active.batch_id}
+
+
+@app.get("/api/v1/batch/history")
+def api_batch_history(limit: int = 10) -> List[Dict[str, Any]]:
+    """Returns history of past overnight batch sessions."""
+    return [b.to_dict() for b in batch_manager.list_batches(limit=limit)]
+
+
 def start_server(host: str = "0.0.0.0", port: int = 8000) -> None:
     """Entry point to launch the studio server via uvicorn."""
     import uvicorn
@@ -1386,3 +1497,5 @@ def start_server(host: str = "0.0.0.0", port: int = 8000) -> None:
 
 if __name__ == "__main__":
     start_server()
+
+
