@@ -57,6 +57,7 @@ RUN pip install --index-url https://download.pytorch.org/whl/cu124 \
 COPY src/ src/
 COPY models/ models/
 COPY docs/ docs/
+COPY top_trending_videos_in_youtube/ top_trending_videos_in_youtube/
 COPY channel_watcher.py pinger_daemon.py trend_scorer.py attribution_engine.py ./
 COPY LICENSE README.md THIRD_PARTY_NOTICES.md ./
 

@@ -44,6 +44,7 @@ def test_dockerfiles_and_compose_specs():
     assert "prebake_models" in df_content
     assert "HEALTHCHECK" in df_content
     assert "assets/flux" in df_content
+    assert "top_trending_videos_in_youtube" in df_content
     assert 'VOLUME ["/app/data", "/app/clips"]' in df_content
     assert "ln -sfn /app/data/rendered_clips /app/clips" in df_content
 
