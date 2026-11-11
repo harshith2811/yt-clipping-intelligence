@@ -33,11 +33,19 @@ def test_dockerfiles_and_compose_specs():
     compose_path = os.path.join(root_dir, "docker-compose.yml")
     compose_gpu_path = os.path.join(root_dir, "docker-compose.gpu.yml")
     requirements_path = os.path.join(root_dir, "requirements.txt")
+    render_yaml_path = os.path.join(root_dir, "render.yaml")
 
     assert os.path.exists(dockerfile_path)
     assert os.path.exists(compose_path)
     assert os.path.exists(compose_gpu_path)
     assert os.path.exists(requirements_path)
+    assert os.path.exists(render_yaml_path)
+
+    render_content = open(render_yaml_path, "r", encoding="utf-8").read()
+    assert "type: web" in render_content
+    assert "runtime: docker" in render_content
+    assert "healthCheckPath: /api/v1/health" in render_content
+    assert "plan: free" in render_content
 
     df_content = open(dockerfile_path, "r", encoding="utf-8").read()
     assert "nvidia/cuda" in df_content or "python:" in df_content

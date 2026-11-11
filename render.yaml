@@ -1,0 +1,53 @@
+# ==============================================================================
+# Render.com Blueprint Specification - Turnkey Single Container Deployment
+# Deploys YouTube Clipping Intelligence Platform to Render Free / Starter Tier
+# ==============================================================================
+
+services:
+  - type: web
+    name: yt-clip-studio
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /api/v1/health
+
+    envVars:
+      # Render dynamically binds the web server via $PORT
+      - key: PORT
+        value: 8000
+
+      # CPU fallback mode for cloud free tier (libx264 veryfast + int8 Whisper)
+      - key: USE_GPU
+        value: "0"
+
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+      # Storage base directory for persistent caching & render jobs
+      - key: DATA_DIR
+        value: /app/data
+
+      # Secure API Keys (Configure in Render Dashboard -> Environment)
+      - key: GEMINI_API_KEY
+        sync: false
+
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+
+      - key: YOUTUBE_API_KEY
+        sync: false
+
+    # Note: Persistent disks require Render Starter ($7/mo).
+    # On Free plan, /app/data runs ephemerally inside the container.
+    # Uncomment below if deploying on a paid instance:
+    # disk:
+    #   name: clip-storage
+    #   mountPath: /app/data
+    #   sizeGB: 1
