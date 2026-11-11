@@ -858,6 +858,11 @@
       color: #f87171;
       border: 1px solid rgba(239, 68, 68, 0.35);
     }
+    .status-pill-retrying {
+      background: rgba(168, 85, 247, 0.15);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.4);
+    }
     .sound-bars-anim {
       display: inline-flex;
       align-items: flex-end;
@@ -5330,6 +5335,8 @@
       { id: 'publish', name: 'QA Verification & Multi-Publishing', desc: 'Broadcast QA validation and delivery to distribution inbox' }
     ];
 
+    let currentSTCVideoInfo = null;
+
     function streamAndPublishTrending(url, title, thumb, creator) {
       if (!url) return;
       SoundFX.playClick();
@@ -5337,6 +5344,7 @@
     }
 
     async function openStreamToClipperModal(info) {
+      currentSTCVideoInfo = info;
       const modal = document.getElementById('streamToClipperModal');
       if (!modal) return;
       modal.style.display = 'flex';
