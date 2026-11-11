@@ -137,3 +137,28 @@ def test_streamer_stream_and_publish():
         )
         assert res["success"] is True
         mock_in_proc.assert_called_once()
+
+
+def test_streamer_stream_and_publish_auto_publish_false():
+    """Verifies stream_and_publish respects auto_publish=False flag in API payload."""
+    streamer = ClipperStreamer(studio_url="http://127.0.0.1:8000")
+    captured_payload = {}
+
+    def fake_urlopen(req, timeout=12):
+        nonlocal captured_payload
+        captured_payload = json.loads(req.data.decode("utf-8"))
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"success": True, "job_id": "test_j1", "status": "QUEUED"}).encode("utf-8")
+        mock_resp.__enter__.return_value = mock_resp
+        return mock_resp
+
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        res = streamer.stream_and_publish(
+            video_url_or_id="https://www.youtube.com/watch?v=0e3GPea1Tyg",
+            max_clips=2,
+            auto_publish=False,
+        )
+        assert res["success"] is True
+        assert captured_payload.get("auto_publish") is False
+        assert captured_payload.get("enable_flux") is True
+
