@@ -617,13 +617,40 @@ class ClippingPipeline:
                     if vis_decision.needed and not vis_decision.broll_video_path:
                         vis_decision = self.visual_director.execute_intervention(vis_decision, output_dir=self.output_dir)
                         flux_telemetry = vis_decision.to_dict()
-                    if vis_decision.broll_video_path and os.path.exists(vis_decision.broll_video_path):
-                        broll_assets_dir = os.path.dirname(vis_decision.broll_video_path)
-                        enable_broll = True
+
+                    # Apply strategic FLUX visual asset into video pipeline
+                    target_asset = vis_decision.broll_video_path or (
+                        vis_decision.asset_path if (vis_decision.asset_path and os.path.exists(vis_decision.asset_path)) else None
+                    )
+                    if vis_decision.needed and target_asset and os.path.exists(target_asset) and self.b_roll_engine:
+                        flux_out_path = os.path.join(
+                            self.output_dir,
+                            f"{os.path.splitext(os.path.basename(rendered_clip.file_path))[0]}_flux.mp4"
+                        )
+                        flux_overlay_res = self.b_roll_engine.apply_explicit_overlay(
+                            video_path=rendered_clip.file_path,
+                            output_path=flux_out_path,
+                            overlay_asset_path=target_asset,
+                            start_seconds=vis_decision.target_start_seconds,
+                            duration_seconds=vis_decision.target_duration_seconds or 2.5,
+                            description=f"FLUX: {vis_decision.concept}",
+                        )
+                        if flux_overlay_res.applied:
+                            prev_path = rendered_clip.file_path
+                            rendered_clip.file_path = flux_overlay_res.output_video_path
+                            if flux_overlay_res.file_hash:
+                                rendered_clip.file_hash = flux_overlay_res.file_hash
+                            if prev_path != rendered_clip.file_path and os.path.exists(prev_path):
+                                try:
+                                    os.remove(prev_path)
+                                except OSError:
+                                    pass
+                            flux_telemetry["overlay_applied"] = True
+                            flux_telemetry["output_video_path"] = rendered_clip.file_path
                 except Exception as ex:
                     logger.warning(f"Visual director strategic evaluation error: {ex}")
 
-            # Post-render Automated B-Roll Overlay if enabled
+            # Post-render Automated B-Roll Overlay if requested by caller
             broll_telemetry = None
             if enable_broll and self.b_roll_engine and active_transcript:
                 words = []
@@ -644,9 +671,15 @@ class ClippingPipeline:
                 )
                 broll_telemetry = broll_res.to_dict()
                 if broll_res.applied:
+                    prev_path = rendered_clip.file_path
                     rendered_clip.file_path = broll_res.output_video_path
                     if broll_res.file_hash:
                         rendered_clip.file_hash = broll_res.file_hash
+                    if prev_path != rendered_clip.file_path and os.path.exists(prev_path):
+                        try:
+                            os.remove(prev_path)
+                        except OSError:
+                            pass
 
             job.rendered_clip = rendered_clip
             checkpoint_payload = {
@@ -656,6 +689,8 @@ class ClippingPipeline:
             }
             if deadair_telemetry:
                 checkpoint_payload["deadair_pruned"] = deadair_telemetry
+            if flux_telemetry:
+                checkpoint_payload["flux_intervention"] = flux_telemetry
             if broll_telemetry:
                 checkpoint_payload["broll_overlay"] = broll_telemetry
             if flux_telemetry:

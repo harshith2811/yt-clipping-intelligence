@@ -203,6 +203,9 @@ class GeminiVisualDirector:
                 if broll_mp4 and os.path.exists(broll_mp4):
                     decision.broll_video_path = broll_mp4
                     logger.info(f"Visual Creative Director successfully synthesized B-roll: {broll_mp4}")
+            else:
+                decision.needed = False
+                decision.rationale = f"Generation failed: {gen_res.error or 'Image could not be produced'}"
         except Exception as e:
             logger.warning(f"Failed to execute FLUX visual intervention: {e}")
             decision.needed = False
@@ -252,6 +255,11 @@ class GeminiVisualDirector:
             raw_text = fence_m.group(1).strip()
 
         parsed = json.loads(raw_text)
+        if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+            parsed = parsed[0]
+        elif not isinstance(parsed, dict):
+            parsed = {}
+
         flux_justified = bool(parsed.get("flux_justified", False))
         rationale = str(parsed.get("rationale", "Evaluated by Gemini Creative Director"))
         concept = str(parsed.get("concept", "Visual Hook"))
@@ -361,17 +369,30 @@ class GeminiVisualDirector:
 
     def _check_existing_stock(self, text: str, assets_dir: str) -> Optional[str]:
         """Checks if local stock footage directory already contains clean matching clips."""
-        words = set(re.findall(r"\b[a-zA-Z]{3,}\b", text.lower()))
-        valid_exts = {".mp4", ".mov", ".mkv"}
+        from ..rendering.b_roll import EXTRA_STOP_WORDS
+        from ..scoring.packaging_linter import GENERIC_STOP_WORDS
+
+        stop_words = EXTRA_STOP_WORDS.union(GENERIC_STOP_WORDS).union({
+            "and", "the", "for", "with", "this", "that", "you", "are", "not", "have",
+            "welcome", "hello", "everyone", "today", "video", "guys", "please",
+        })
+
+        meaningful_words = {
+            w for w in re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
+            if w not in stop_words
+        }
+        if not meaningful_words:
+            return None
+
+        valid_exts = {".mp4", ".mov", ".mkv", ".webm"}
 
         for root, _, files in os.walk(assets_dir):
             for f in files:
                 ext = os.path.splitext(f)[1].lower()
                 if ext in valid_exts:
-                    fname = os.path.splitext(f)[0].lower()
-                    for w in words:
-                        if w in fname:
-                            return os.path.join(root, f)
+                    fname_tokens = set(re.findall(r"[a-z0-9]{3,}", os.path.splitext(f)[0].lower()))
+                    if fname_tokens.intersection(meaningful_words):
+                        return os.path.join(root, f)
         return None
 
 

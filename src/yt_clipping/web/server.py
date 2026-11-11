@@ -108,6 +108,17 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # In-memory dictionary for backwards-compatibility with tests referencing server.active_render_jobs
 active_render_jobs: Dict[str, Dict[str, Any]] = {}
 
+def _prune_active_render_jobs(max_entries: int = 100) -> None:
+    """Prunes finished jobs from in-memory tracking to prevent continuous memory growth."""
+    if len(active_render_jobs) <= max_entries:
+        return
+    terminal_keys = [k for k, v in active_render_jobs.items() if v.get("status") in ("COMPLETED", "FAILED", "CANCELLED")]
+    for k in terminal_keys[: len(active_render_jobs) - max_entries]:
+        active_render_jobs.pop(k, None)
+    while len(active_render_jobs) > max_entries:
+        oldest = next(iter(active_render_jobs))
+        active_render_jobs.pop(oldest, None)
+
 
 # ------------------------------------------------------------------------------
 # Pydantic Request Models
@@ -616,6 +627,8 @@ def api_render(req: RenderRequest, bg_tasks: BackgroundTasks) -> Dict[str, Any]:
     task_id = job.job_id
 
     # Populate active_render_jobs for backwards compatibility with tests
+    _prune_active_render_jobs()
+    _prune_active_render_jobs()
     active_render_jobs[task_id] = {
         "task_id": task_id,
         "video_id": video_id,
@@ -780,12 +793,20 @@ def _run_stream_to_clipper_worker(task_id: str, req: StreamToClipperRequest, vid
             cand_data = sidecar.candidate_data if sidecar else {}
             final_desc = cand_data.get("suggested_description") or ""
 
+            file_hash_val = "hash"
+            if os.path.exists(clip_file):
+                try:
+                    with open(clip_file, "rb") as cf:
+                        file_hash_val = hashlib.sha256(cf.read(8192)).hexdigest()
+                except OSError:
+                    pass
+
             rendered_clip_obj = RenderedClip(
                 clip_id=cid,
                 job_id=f"job_pub_{cid}",
                 candidate_id=cid,
                 file_path=clip_file,
-                file_hash=hashlib.sha256(open(clip_file, "rb").read(8192)).hexdigest() if os.path.exists(clip_file) else "hash",
+                file_hash=file_hash_val,
                 duration_seconds=duration,
                 width=1080,
                 height=1920,
@@ -889,6 +910,7 @@ def api_trending_stream_to_clipper(req: StreamToClipperRequest, bg_tasks: Backgr
     job = job_manager.create_job(video_id=video_id, request_params=job_params)
     task_id = job.job_id
 
+    _prune_active_render_jobs()
     active_render_jobs[task_id] = {
         "task_id": task_id,
         "video_id": video_id,

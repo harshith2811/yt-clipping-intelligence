@@ -99,6 +99,8 @@ class ClipperStreamer:
         layout: str = "active_speaker",
         subtitle_preset: str = "hormozi",
         gpu: bool = False,
+        auto_publish: bool = False,
+        enable_flux: bool = True,
     ) -> Dict[str, Any]:
         """
         Streams a video directly using in-process Python pipeline when web server is offline.
@@ -111,11 +113,13 @@ class ClipperStreamer:
                 layout_mode=layout,
                 subtitle_preset=subtitle_preset,
                 vcodec="h264_nvenc" if gpu else "libx264",
+                enable_flux=enable_flux,
             )
             result = pipeline.process_video_multi(
                 video_id=video_url_or_id,
                 max_clips=max_clips,
                 profile=profile,
+                dry_run=not auto_publish,
             )
             return {
                 "success": True,
@@ -142,6 +146,7 @@ class ClipperStreamer:
         platforms: Optional[List[str]] = None,
         target: str = "watched_folder",
         approved_by_user: bool = True,
+        enable_flux: bool = True,
     ) -> Dict[str, Any]:
         """
         Executes end-to-end stream-to-clipper and publishing workflow directly.
@@ -154,10 +159,11 @@ class ClipperStreamer:
             "layout": layout,
             "subtitle_preset": subtitle_preset,
             "gpu": gpu,
-            "auto_publish": True,
+            "auto_publish": auto_publish,
             "platforms": platforms or ["youtube_shorts", "instagram_reels", "tiktok"],
             "target": target,
             "approved_by_user": approved_by_user,
+            "enable_flux": enable_flux,
         }
 
         url = f"{self.studio_url}/api/v1/trending/stream-to-clipper"
@@ -192,6 +198,8 @@ class ClipperStreamer:
                 layout=layout,
                 subtitle_preset=subtitle_preset,
                 gpu=gpu,
+                auto_publish=auto_publish,
+                enable_flux=enable_flux,
             )
 
     def stream_top_video(

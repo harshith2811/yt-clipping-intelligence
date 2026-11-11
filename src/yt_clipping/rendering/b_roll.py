@@ -12,8 +12,11 @@ import re
 import subprocess
 import shutil
 import hashlib
+import logging
 from collections import Counter
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from ..contracts.models import HighlightCandidate, Transcript, WordTimestamp
 from ..scoring.packaging_linter import GENERIC_STOP_WORDS, LAZY_ADJECTIVES_MAP
@@ -500,5 +503,130 @@ class BRollOverlayEngine:
                 monologue_intervals=matched_intervals,
                 matched_assets=matched_paths,
                 filtergraph=filtergraph,
+                telemetry={"exception": str(e)},
+            )
+
+    def apply_explicit_overlay(
+        self,
+        video_path: str,
+        output_path: str,
+        overlay_asset_path: str,
+        start_seconds: float,
+        duration_seconds: float,
+        description: str = "Strategic FLUX Visual Intervention",
+    ) -> BRollOverlayResult:
+        """
+        Composites an explicit visual asset (Ken Burns video or static image)
+        at an exact timestamp with 0.25s alpha fade transitions and vertical 9:16 cropping.
+        Does not depend on keyword matching.
+        """
+        if not os.path.exists(video_path):
+            return BRollOverlayResult(
+                applied=False,
+                input_video_path=video_path,
+                output_video_path=video_path,
+                telemetry={"error": f"Input video not found: {video_path}"},
+            )
+
+        if not os.path.exists(overlay_asset_path):
+            return BRollOverlayResult(
+                applied=False,
+                input_video_path=video_path,
+                output_video_path=video_path,
+                telemetry={"error": f"Overlay asset not found: {overlay_asset_path}"},
+            )
+
+        start_s = max(0.0, float(start_seconds))
+        dur_s = max(1.0, float(duration_seconds))
+        interval = MonologueInterval(
+            start_seconds=round(start_s, 3),
+            end_seconds=round(start_s + dur_s, 3),
+            duration_seconds=round(dur_s, 3),
+            text=description,
+            keywords=["flux", "intervention"],
+            matched_asset_path=overlay_asset_path,
+        )
+
+        broll_inputs = [(1, interval, overlay_asset_path)]
+        filtergraph, output_maps = self.build_broll_filtergraph(
+            primary_input_idx=0,
+            broll_inputs=broll_inputs,
+            width=self.config.width,
+            height=self.config.height,
+        )
+
+        tmp_out = f"{output_path}.tmp.mp4"
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+
+        is_image = overlay_asset_path.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+        if is_image:
+            cmd = ["ffmpeg", "-y", "-i", video_path, "-loop", "1", "-t", str(dur_s), "-i", overlay_asset_path]
+        else:
+            cmd = ["ffmpeg", "-y", "-i", video_path, "-i", overlay_asset_path]
+
+        cmd.extend(["-filter_complex", filtergraph])
+        cmd.extend(output_maps)
+        cmd.extend([
+            "-c:v", self.config.vcodec,
+            "-crf", str(self.config.crf),
+            "-preset", "fast",
+        ])
+
+        if self.config.mute_broll:
+            cmd.extend(["-c:a", "copy"])
+        else:
+            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+
+        cmd.append(tmp_out)
+
+        def _execute_ffmpeg(command):
+            return subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120)
+
+        try:
+            res = _execute_ffmpeg(cmd)
+            # Graceful CPU fallback if hardware encoder failed
+            if res.returncode != 0 and self.config.vcodec == "h264_nvenc":
+                logger.warning("NVENC failed during explicit overlay; retrying with libx264.")
+                cmd_cpu = [c if c != "h264_nvenc" else "libx264" for c in cmd]
+                res = _execute_ffmpeg(cmd_cpu)
+
+            if res.returncode == 0 and os.path.exists(tmp_out) and os.path.getsize(tmp_out) > 0:
+                os.replace(tmp_out, output_path)
+                sha256 = _compute_sha256(output_path)
+                return BRollOverlayResult(
+                    applied=True,
+                    input_video_path=video_path,
+                    output_video_path=output_path,
+                    monologue_intervals=[interval],
+                    matched_assets=[overlay_asset_path],
+                    filtergraph=filtergraph,
+                    file_hash=sha256,
+                    telemetry={"num_overlays": 1, "type": "strategic_visual_intervention", "status": "COMPLETED"},
+                )
+            else:
+                if os.path.exists(tmp_out):
+                    try:
+                        os.remove(tmp_out)
+                    except OSError:
+                        pass
+                return BRollOverlayResult(
+                    applied=False,
+                    input_video_path=video_path,
+                    output_video_path=video_path,
+                    monologue_intervals=[interval],
+                    matched_assets=[overlay_asset_path],
+                    filtergraph=filtergraph,
+                    telemetry={"error": f"FFmpeg failed with code {res.returncode}", "stderr": res.stderr[-500:] if res.stderr else ""},
+                )
+        except Exception as e:
+            if os.path.exists(tmp_out):
+                try:
+                    os.remove(tmp_out)
+                except OSError:
+                    pass
+            return BRollOverlayResult(
+                applied=False,
+                input_video_path=video_path,
+                output_video_path=video_path,
                 telemetry={"exception": str(e)},
             )
