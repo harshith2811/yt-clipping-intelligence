@@ -531,3 +531,152 @@ def test_active_render_jobs_pruning():
     _prune_active_render_jobs(max_entries=50)
     assert len(active_render_jobs) <= 50
 
+
+def test_pipeline_integrates_flux_overlay_end_to_end(tmp_path):
+    """Verifies pipeline lifecycle directly executes FLUX visual intervention overlay when justified."""
+    from yt_clipping.orchestration.pipeline import ClippingPipeline
+    from yt_clipping.scoring.visual_director import VisualCreativeDirector, VisualInterventionDecision
+    from yt_clipping.rendering.b_roll import BRollOverlayEngine, BRollOverlayResult
+    from yt_clipping.contracts.models import RenderProfile, HighlightCandidate, ScoreBreakdown, Transcript, TranscriptSegment, WordTimestamp, RenderedClip
+
+    out_dir = tmp_path / "rendered"
+    out_dir.mkdir()
+
+    # Create dummy initial rendered clip
+    initial_clip_path = str(out_dir / "candidate_1.mp4")
+    with open(initial_clip_path, "wb") as f:
+        f.write(b"dummy initial clip media bytes")
+
+    # Create dummy FLUX video
+    flux_video_path = str(tmp_path / "flux_neural_broll.mp4")
+    with open(flux_video_path, "wb") as f:
+        f.write(b"dummy flux ken burns media bytes")
+
+    # Mock renderer
+    mock_renderer = MagicMock()
+    mock_renderer.render_clip.return_value = RenderedClip(
+        clip_id="c1",
+        job_id="j1",
+        candidate_id="c1",
+        file_path=initial_clip_path,
+        file_hash="init_hash",
+        duration_seconds=15.0,
+        width=1080,
+        height=1920,
+        manifest_path="",
+        rendered_at="2026-11-11T00:00:00Z",
+    )
+
+    # Mock visual director
+    mock_director = MagicMock(spec=VisualCreativeDirector)
+    mock_decision = VisualInterventionDecision(
+        needed=True,
+        rationale="Abstract neural computing concept requires FLUX hook",
+        concept="Neural Grid",
+        target_start_seconds=1.5,
+        target_duration_seconds=2.5,
+        flux_prompt="Photorealistic neural network",
+        style_preset="tech_minimal",
+        broll_video_path=flux_video_path,
+        is_generated=True,
+        provider="gemini_creative_director",
+    )
+    mock_director.evaluate_candidate.return_value = mock_decision
+
+    # Mock broll engine
+    final_flux_path = str(out_dir / "candidate_1_flux.mp4")
+    with open(final_flux_path, "wb") as f:
+        f.write(b"dummy final overlaid mp4 bytes")
+
+    mock_broll = MagicMock(spec=BRollOverlayEngine)
+    mock_broll.apply_explicit_overlay.return_value = BRollOverlayResult(
+        applied=True,
+        input_video_path=initial_clip_path,
+        output_video_path=final_flux_path,
+        file_hash="overlaid_hash_12345",
+    )
+
+    # Mock verifier, publisher, journal, etc.
+    mock_verifier = MagicMock()
+    mock_verifier.verify_clip.return_value = MagicMock(status="PASSED", failure_reasons=[])
+    mock_pub = MagicMock()
+    mock_pub.publish.return_value = MagicMock(status="DELIVERED", receipt_id="rcpt_1")
+    mock_journal = MagicMock()
+
+    pipeline = ClippingPipeline(
+        rights_policy=MagicMock(),
+        asset_provider=MagicMock(),
+        transcriber=MagicMock(),
+        detector=MagicMock(),
+        scorer=MagicMock(),
+        renderer=mock_renderer,
+        verifier=mock_verifier,
+        publisher=mock_pub,
+        journal=mock_journal,
+        b_roll_engine=mock_broll,
+        visual_director=mock_director,
+        output_dir=str(out_dir),
+    )
+
+    candidate = HighlightCandidate(
+        candidate_id="c1",
+        video_id="v_test",
+        start_seconds=0.0,
+        end_seconds=15.0,
+        duration_seconds=15.0,
+        score=95.0,
+        hook_title="AI Revolution",
+        breakdown=ScoreBreakdown(hook_score=9.0, moment_score=9.0, coherence_score=9.0, pacing_score=9.0),
+    )
+    transcript = Transcript(
+        video_id="v_test",
+        language="en",
+        duration_seconds=15.0,
+        text="The AI neural network revolution is here.",
+        segments=[
+            TranscriptSegment(
+                segment_id=0,
+                start=0.0,
+                end=15.0,
+                text="The AI neural network revolution is here.",
+                words=[WordTimestamp(word="AI", start=0.5, end=1.0)],
+            )
+        ],
+    )
+    job = MagicMock()
+    job.source_metadata = {"title": "AI Revolution"}
+
+    profile = RenderProfile(enable_flux=True)
+    res_job = pipeline._process_candidate_lifecycle(
+        job=job,
+        candidate=candidate,
+        transcript=transcript,
+        asset_path=initial_clip_path,
+        probe_info={},
+        manifest=None,
+        render_profile=profile,
+        auto_approve_threshold=50.0,
+        dry_run=True,
+        enable_deadair_pruning=False,
+        enable_broll=False,
+        broll_assets_dir=None,
+    )
+
+    # 1. Visual director evaluated candidate
+    mock_director.evaluate_candidate.assert_called_once()
+
+    # 2. BRoll explicit overlay was called with correct parameters
+    mock_broll.apply_explicit_overlay.assert_called_once_with(
+        video_path=initial_clip_path,
+        output_path=str(out_dir / "candidate_1_flux.mp4"),
+        overlay_asset_path=flux_video_path,
+        start_seconds=1.5,
+        duration_seconds=2.5,
+        description="FLUX: Neural Grid",
+    )
+
+    # 3. Rendered clip updated to overlaid video
+    assert res_job.rendered_clip.file_path == final_flux_path
+    assert res_job.rendered_clip.file_hash == "overlaid_hash_12345"
+
+
