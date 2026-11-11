@@ -191,6 +191,25 @@ In addition to autonomous pipeline execution, the platform provides a native **M
 - **`soft_zen` Acoustic Profile:** Pure fundamental C5 (523.25 Hz) with gentle fifth harmonic (G5) and octave decay, 30ms raised-cosine soft attack, targeting approximately -12.5 dB peak amplitude.
 - **Broadcast Call-to-Action Animation:** Animated ASS vector subscribe pill with rocking bell icon and optional blurred backdrop sampled from the main video's final frame.
 
+### L. Strategic Gemini Visual Director & Cloudflare FLUX.1 Engine
+- **Narrative Pacing & Tension Evaluation:** The Gemini visual director evaluates speech energy, semantic shifts, and subtitle timestamps before intervening—preventing arbitrary prompt injections that disrupt speaker continuity.
+- **Stock Footage Re-Use Gate:** Verifies local assets and existing footage to avoid gratuitous AI generations when context is already visually supported.
+- **Dynamic 9:16 Ken Burns Cutaways:** Direct composition of photorealistic vertical visual assets generated via `@cf/black-forest-labs/flux-1-schnell` with smooth pan/zoom motion transitions.
+
+### M. Top Trending >10M Channels Autonomous Streamer & 1-Click Publishing
+- **Autonomous StreamToClipper:** 1-click execution (`⚡ Stream #1 & Publish`) directly from the Top Trending carousel.
+- **End-to-End Clipping & Distribution:** Streams high-velocity trending videos, tracks active speakers with YuNet, generates kinetic captions, and publishes finished 9:16 Shorts directly to YouTube, TikTok, and Instagram Reels.
+- **Overnight Multi-Video Batch Scheduler:** Background worker capable of selecting and consecutively processing multi-video batches while maintaining strict memory and GPU locks.
+
+### N. Turnkey Docker Containerization & Render.com Blueprint (`render.yaml`)
+- **Single-Container Architecture:** Completely containerized runtime with automated model prebaking (Faster-Whisper, YuNet, YOLOv8) and zero cold-start latency.
+- **Render.com Free-Tier Deployment:** Turnkey `render.yaml` specification supporting free cloud hosting with dynamic `$PORT` binding and `/api/v1/health` probes.
+- **Automatic Compute Detection:** Dispatches NVIDIA NVENC on CUDA environments with transparent fallback to multi-threaded CPU `libx264` and Int8 Faster-Whisper.
+
+### O. Linear/Figma-Grade Obsidian Web Studio Dashboard
+- **Luxury UI/UX Aesthetics:** Floating glass dock navigation with standardized 32px baseline, custom SVG glyphs, and real-time hardware telemetry radar (`Online • GPU Active`).
+- **Creator Tooling Suite:** Toggleable Social Media Safe Zones (TikTok, Shorts, Reels), interactive audio waveform canvas, video frame-stepping (±0.05s), virality radar metrics, and poster frame capture.
+
 ---
 
 ## 3. Hardware Requirements & OS Certification
@@ -263,6 +282,12 @@ docker run -d --name yt-studio -p 8000:8000 -v ./data:/app/data --gpus all yt-cl
 # Access the Live Studio Dashboard in your browser:
 # http://localhost:8000
 ```
+
+### ☁️ Render.com 1-Click Cloud Deployment (Free Tier)
+Deploy the single-container Web Studio to Render's free tier with zero manual configuration using the included `render.yaml` blueprint:
+1. Connect your repository to [Render.com](https://render.com).
+2. Click **New +** → **Blueprint** and select this repo.
+3. Render automatically binds the dynamic `$PORT`, applies Int8/libx264 CPU fallback, and connects to `/api/v1/health` probes.
 
 ### 🖥️ Native CLI Web Studio Launch
 You can also launch the Web Studio directly via the CLI:
@@ -388,9 +413,18 @@ yt-clipping-intelligence/
 ├── pyproject.toml                  # Packaging specification & CLI entrypoints
 ├── requirements.txt                # Pinned production dependencies
 ├── pytest.ini                      # Pytest runner configuration
+├── Dockerfile                      # Standalone 24/7 container runtime
+├── docker-compose.yml              # Multi-mode container orchestration
+├── docker-entrypoint.sh            # Container init & service dispatch
+├── render.yaml                     # Turnkey Render.com free-tier deployment blueprint
 ├── LICENSE                         # MIT License
 ├── README.md                       # Master platform documentation
 ├── THIRD_PARTY_NOTICES.md          # Upstream research attribution
+│
+├── top_trending_videos_in_youtube/ # Top Trending >10M subscriber channels streamer & autonomous clipper
+│   ├── fetcher.py                  # High-velocity video discovery & caching
+│   ├── streamer.py                 # In-process & REST stream-to-clipper engine
+│   └── test_trending.py            # Automated streamer test harness
 │
 ├── channel_watcher.py              # CLI: Creator registry & live scan sweeps
 ├── pinger_daemon.py                # Daemon: Autonomous RSS & WebSub pinger
