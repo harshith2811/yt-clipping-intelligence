@@ -5513,6 +5513,11 @@
         if (activeSTCPollTimer) clearInterval(activeSTCPollTimer);
         stopSTCTimer();
         showSTCFailure(job.error || job.message || 'Pipeline operation failed.');
+      } else if (job.status === 'RETRYING' || job.status === 'retrying') {
+        if (badge) {
+          badge.className = 'status-pill-badge status-pill-retrying';
+          badge.innerText = 'Retrying Pipeline';
+        }
       }
     }
 
@@ -5560,6 +5565,7 @@
       if (actionBtn) {
         actionBtn.style.display = 'inline-flex';
         actionBtn.innerText = 'Watch in Studio';
+        actionBtn.onclick = handleSTCAction;
       }
 
       showToast('StreamToClipper Short rendered and published!');
@@ -5572,6 +5578,7 @@
       const resContainer = document.getElementById('stcResultContainer');
       const badge = document.getElementById('stcStatusBadge');
       const bar = document.getElementById('stcProgressBar');
+      const actionBtn = document.getElementById('stcActionBtn');
 
       if (badge) {
         badge.className = 'status-pill-badge status-pill-failed';
@@ -5587,6 +5594,14 @@
             <div style="font-size: 0.72rem; color: #cbd5e1; line-height: 1.4;">${sanitizeHTML(errorMsg)}</div>
           </div>
         `;
+      }
+
+      if (actionBtn && currentSTCVideoInfo) {
+        actionBtn.style.display = 'inline-flex';
+        actionBtn.innerText = '⚡ Retry Pipeline';
+        actionBtn.onclick = () => {
+          openStreamToClipperModal(currentSTCVideoInfo);
+        };
       }
     }
 

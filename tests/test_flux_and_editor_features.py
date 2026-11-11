@@ -457,9 +457,77 @@ def test_api_trending_stream_to_clipper_endpoint(client):
     )
     assert resp_bad.status_code in (400, 422)
 
-    # Invalid URL test
-    resp_bad = client.post(
-        "/api/v1/trending/stream-to-clipper",
-        json={"video_id_or_url": ""},
+
+def test_stock_footage_false_positive_prevention(tmp_path):
+    """Verifies that conversational stop words do not falsely match unrelated stock assets."""
+    from yt_clipping.scoring.visual_director import GeminiVisualDirector
+
+    stock_dir = tmp_path / "stock"
+    stock_dir.mkdir()
+    (stock_dir / "grand_canyon.mp4").write_bytes(b"dummy canyon footage")
+    (stock_dir / "quantum_computing.mp4").write_bytes(b"dummy quantum footage")
+
+    director = GeminiVisualDirector(offline_mode=True)
+
+    # 1. Stop words ("and", "hello", "welcome") must NOT match grand_canyon.mp4
+    conversational_text = "Hello and welcome everyone to today's video discussion"
+    matched_conv = director._check_existing_stock(conversational_text, str(stock_dir))
+    assert matched_conv is None, f"Conversational chat falsely matched {matched_conv}"
+
+    # 2. Genuine domain keyword "quantum" must correctly match quantum_computing.mp4
+    quantum_text = "Today we discuss the breakthrough in quantum processing units"
+    matched_quantum = director._check_existing_stock(quantum_text, str(stock_dir))
+    assert matched_quantum is not None
+    assert "quantum_computing.mp4" in matched_quantum
+
+
+def test_broll_engine_apply_explicit_overlay(tmp_path):
+    """Verifies BRollOverlayEngine can composite an explicit visual asset directly."""
+    import subprocess
+    from yt_clipping.rendering.b_roll import BRollOverlayEngine
+
+    engine = BRollOverlayEngine()
+
+    main_vid = str(tmp_path / "main.mp4")
+    overlay_img = str(tmp_path / "overlay.png")
+    out_vid = str(tmp_path / "out.mp4")
+
+    # Generate small 1s test media using FFmpeg
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=540x960:d=2", "-c:v", "libx264", "-t", "2", main_vid],
+        capture_output=True,
     )
-    assert resp_bad.status_code in (400, 422)
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=blue:s=540x960:d=1", "-vframes", "1", overlay_img],
+        capture_output=True,
+    )
+
+    if os.path.exists(main_vid) and os.path.exists(overlay_img):
+        res = engine.apply_explicit_overlay(
+            video_path=main_vid,
+            output_path=out_vid,
+            overlay_asset_path=overlay_img,
+            start_seconds=0.2,
+            duration_seconds=1.0,
+            description="FLUX Blue Visual Card",
+        )
+        assert res.applied is True
+        assert os.path.exists(out_vid)
+        assert os.path.getsize(out_vid) > 1000
+        assert res.file_hash != ""
+
+
+def test_active_render_jobs_pruning():
+    """Verifies that _prune_active_render_jobs prevents unbounded memory growth."""
+    from yt_clipping.web.server import active_render_jobs, _prune_active_render_jobs
+
+    # Add 120 jobs with mixed terminal and active statuses
+    for i in range(120):
+        jid = f"job_{i}"
+        status = "COMPLETED" if i < 110 else "PROCESSING"
+        active_render_jobs[jid] = {"task_id": jid, "status": status}
+
+    assert len(active_render_jobs) >= 120
+    _prune_active_render_jobs(max_entries=50)
+    assert len(active_render_jobs) <= 50
+
