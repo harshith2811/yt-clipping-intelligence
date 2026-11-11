@@ -310,6 +310,29 @@ class FFmpegRenderer(Renderer):
         except (subprocess.SubprocessError, FileNotFoundError) as ex:
             last_error = str(ex)
 
+        # Graceful CPU fallback if NVENC failed or is unavailable on this hardware
+        if not rendered_via_cli and effective_profile.vcodec == "h264_nvenc":
+            logger.warning("NVENC GPU rendering failed or unavailable. Falling back gracefully to CPU libx264.")
+            from dataclasses import replace
+            cpu_profile = replace(effective_profile, vcodec="libx264")
+            cpu_cmd = self.build_ffmpeg_command(
+                source_path=source_path,
+                start_seconds=candidate.start_seconds,
+                duration_seconds=candidate.duration_seconds,
+                profile=cpu_profile,
+                output_path=temp_path,
+                subtitle_ass_path=sub_path,
+                crop_override=crop_override,
+            )
+            try:
+                res_cpu = subprocess.run(cpu_cmd, capture_output=True, text=True, timeout=180)
+                if res_cpu.returncode == 0 and os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
+                    rendered_via_cli = True
+                else:
+                    last_error = f"CPU fallback returncode {res_cpu.returncode}: {res_cpu.stderr[-500:] if res_cpu.stderr else 'No stderr'}"
+            except (subprocess.SubprocessError, FileNotFoundError) as ex:
+                last_error = f"CPU fallback failed: {ex}"
+
         # BUG-23 fix: Do NOT generate dummy MP4 in production!
         if not rendered_via_cli:
             if not self.allow_synthetic:
@@ -382,6 +405,14 @@ class FFmpegRenderer(Renderer):
                         os.remove(final_path)
                     os.rename(combined_path, final_path)
                     final_duration += outro_dur
+
+                # Intermediate temp cleanup
+                for tmp_file in [last_frame_path, outro_path]:
+                    if tmp_file and os.path.exists(tmp_file):
+                        try:
+                            os.remove(tmp_file)
+                        except OSError:
+                            pass
             except Exception as outro_err:
                 # Graceful degradation: keep original main clip if outro fails
                 logger.warning(f"Failed to append outro card: {outro_err}", exc_info=True)

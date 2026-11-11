@@ -323,3 +323,143 @@ def test_broll_aspect_ratio_preservation(tmp_path):
     if clip:
         assert os.path.exists(clip)
         assert os.path.getsize(clip) > 1000
+
+
+def test_visual_creative_director_heuristics(tmp_path):
+    """Verifies GeminiVisualDirector heuristic evaluation and stock reuse guard."""
+    from yt_clipping.scoring.visual_director import GeminiVisualDirector, VisualInterventionDecision
+    from yt_clipping.contracts.models import (
+        HighlightCandidate,
+        ScoreBreakdown,
+        Transcript,
+        TranscriptSegment,
+        WordTimestamp,
+    )
+
+    director = GeminiVisualDirector(api_key="", offline_mode=True)
+    dummy_breakdown = ScoreBreakdown(hook_score=8.5, moment_score=8.5, coherence_score=8.5, pacing_score=8.5)
+
+    # 1. Short clip duration guard
+    short_cand = HighlightCandidate(
+        candidate_id="c1",
+        video_id="v1",
+        start_seconds=0.0,
+        end_seconds=4.0,
+        duration_seconds=4.0,
+        score=85.0,
+        hook_title="Short Hook",
+        breakdown=dummy_breakdown,
+    )
+    t = Transcript(video_id="v1", language="en", duration_seconds=10.0, text="Hi welcome back", segments=[])
+    res = director.evaluate_candidate(short_cand, t)
+    assert res.needed is False
+    assert "duration" in res.rationale.lower()
+
+    # 2. Local stock reuse guard
+    stock_dir = tmp_path / "stock"
+    stock_dir.mkdir()
+    stock_file = stock_dir / "futuristic_quantum_ai.mp4"
+    stock_file.write_bytes(b"dummy stock bytes")
+
+    long_cand = HighlightCandidate(
+        candidate_id="c2",
+        video_id="v1",
+        start_seconds=0.0,
+        end_seconds=15.0,
+        duration_seconds=15.0,
+        score=92.0,
+        hook_title="Quantum AI Breakthrough",
+        breakdown=dummy_breakdown,
+    )
+    t_rich = Transcript(
+        video_id="v1",
+        language="en",
+        duration_seconds=20.0,
+        text="The breakthrough in quantum artificial intelligence is reshaping computing.",
+        segments=[
+            TranscriptSegment(
+                segment_id=1,
+                start=0.0,
+                end=15.0,
+                text="The breakthrough in quantum artificial intelligence is reshaping computing.",
+                words=[
+                    WordTimestamp(word="quantum", start=1.0, end=2.0),
+                    WordTimestamp(word="artificial", start=2.5, end=3.5),
+                    WordTimestamp(word="intelligence", start=4.0, end=5.0),
+                ],
+            )
+        ],
+    )
+    res_stock = director.evaluate_candidate(long_cand, t_rich, available_assets_dir=str(stock_dir))
+    assert res_stock.needed is False
+    assert "stock" in res_stock.rationale.lower()
+
+    # 3. Justified heuristic generation when no matching stock exists
+    res_heuristic = director.evaluate_candidate(long_cand, t_rich, available_assets_dir=str(tmp_path / "empty"))
+    assert res_heuristic.needed is True
+    assert res_heuristic.flux_prompt != ""
+    assert res_heuristic.style_preset in ["tech_minimal", "neon_cyber", "cinematic_hook"]
+    assert res_heuristic.target_duration_seconds > 0.0
+
+
+def test_visual_creative_director_execute_intervention(tmp_path):
+    """Verifies that execute_intervention produces valid image and Ken Burns B-roll clip."""
+    from yt_clipping.scoring.visual_director import GeminiVisualDirector, VisualInterventionDecision
+
+    flux_gen = FluxImageGenerator(account_id="", api_token="", output_dir=str(tmp_path))
+    director = GeminiVisualDirector(flux_generator=flux_gen, offline_mode=True)
+
+    decision = VisualInterventionDecision(
+        needed=True,
+        rationale="Illustrating neural network concept",
+        concept="Neural Grid",
+        target_start_seconds=1.5,
+        target_duration_seconds=1.0,
+        flux_prompt="Glowing neural network matrix with cyan light beams",
+        style_preset="tech_minimal",
+        motion="zoom_in",
+    )
+
+    executed = director.execute_intervention(decision, output_dir=str(tmp_path))
+    assert executed.is_generated is True
+    assert executed.asset_path is not None
+    assert os.path.exists(executed.asset_path)
+    if executed.broll_video_path:
+        assert os.path.exists(executed.broll_video_path)
+
+
+def test_api_trending_stream_to_clipper_endpoint(client):
+    """Verifies POST /api/v1/trending/stream-to-clipper initiates background workflow."""
+    with patch("yt_clipping.web.server._render_video_pipeline", return_value=[{"clip_id": "clip_test_1", "file_path": "clip.mp4", "duration": 15.0}]):
+        resp = client.post(
+            "/api/v1/trending/stream-to-clipper",
+            json={
+                "video_id_or_url": "https://www.youtube.com/watch?v=0e3GPea1Tyg",
+                "max_clips": 1,
+                "layout": "active_speaker",
+                "subtitle_preset": "hormozi",
+                "gpu": False,
+                "auto_publish": False,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert "task_id" in data
+        assert "job_id" in data
+        assert data["status"] == "QUEUED"
+        assert data["check_status_url"].startswith("/api/v1/jobs/")
+
+    # Invalid URL test
+    resp_bad = client.post(
+        "/api/v1/trending/stream-to-clipper",
+        json={"video_id_or_url": ""},
+    )
+    assert resp_bad.status_code in (400, 422)
+
+    # Invalid URL test
+    resp_bad = client.post(
+        "/api/v1/trending/stream-to-clipper",
+        json={"video_id_or_url": ""},
+    )
+    assert resp_bad.status_code in (400, 422)

@@ -102,54 +102,70 @@
       background: rgba(255, 255, 255, 0.35);
     }
 
-    /* Top Navigation Header - Refined Luxury Styling */
+    /* ============================================================== */
+    /* TOP NAVIGATION HEADER - LUXURY LINEAR / FIGMA AESTHETIC       */
+    /* ============================================================== */
     header {
-      background: rgba(9, 10, 15, 0.9);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-      padding: 0 1.25rem;
-      height: 56px;
+      background: rgba(9, 11, 17, 0.88);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 0 1.5rem;
+      height: 58px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       position: sticky;
       top: 0;
       z-index: 100;
-      box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 30px -6px rgba(0, 0, 0, 0.6);
     }
 
+    /* Left: Brand Identity */
     .brand {
       display: flex;
       align-items: center;
-      gap: 0.65rem;
+      gap: 0.75rem;
       text-decoration: none;
       flex-shrink: 0;
+      transition: opacity 0.15s ease;
+    }
+    .brand:hover {
+      opacity: 0.92;
     }
     .brand-icon {
-      width: 30px;
-      height: 30px;
-      background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%);
       border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #fff;
-      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+      color: #ffffff;
+      box-shadow: 0 2px 10px rgba(79, 70, 229, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.35);
       flex-shrink: 0;
+      position: relative;
+    }
+    .brand-icon::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      pointer-events: none;
     }
     .brand-icon .svg-icon {
-      width: 16px;
-      height: 16px;
+      width: 17px;
+      height: 17px;
     }
     .brand-text {
       display: flex;
       align-items: center;
-      gap: 0.45rem;
+      gap: 0.5rem;
     }
     .brand-title {
-      font-size: 0.975rem;
-      font-weight: 700;
+      font-size: 0.95rem;
+      font-weight: 600;
       letter-spacing: -0.025em;
       color: #f8fafc;
       margin: 0;
@@ -157,97 +173,129 @@
     }
     .brand-badge {
       font-size: 0.625rem;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      padding: 0.12rem 0.45rem;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.06);
+      font-weight: 600;
+      font-family: var(--font-mono, monospace);
+      letter-spacing: 0.04em;
+      padding: 0.12rem 0.5rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
       color: #94a3b8;
       border: 1px solid rgba(255, 255, 255, 0.08);
       white-space: nowrap;
+      line-height: 1.2;
     }
 
-    /* Central Segmented Navigation Tabs */
+    /* Central Segmented Dock */
     .nav-tabs {
       display: inline-flex;
       align-items: center;
-      background: rgba(255, 255, 255, 0.03);
+      background: rgba(18, 21, 31, 0.72);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       padding: 3px;
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
       gap: 2px;
       flex-shrink: 0;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
     }
     .nav-btn {
       background: transparent;
       border: 1px solid transparent;
       color: #94a3b8;
-      padding: 0.35rem 0.75rem;
+      padding: 0 0.85rem;
       height: 32px;
-      border-radius: 6px;
+      border-radius: 7px;
       font-size: 0.8rem;
       font-weight: 500;
+      letter-spacing: -0.01em;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       gap: 0.45rem;
       white-space: nowrap;
-      transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
       font-family: inherit;
       line-height: 1;
       outline: none;
+      position: relative;
     }
     .nav-btn:hover {
-      color: #f1f5f9;
-      background: rgba(255, 255, 255, 0.04);
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.05);
     }
     .nav-btn.active {
-      background: rgba(255, 255, 255, 0.08);
-      color: #fff;
-      border-color: rgba(255, 255, 255, 0.12);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+      background: rgba(255, 255, 255, 0.09);
+      color: #ffffff;
+      font-weight: 600;
+      border-color: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.12);
     }
     .nav-btn:focus-visible {
-      border-color: var(--blue);
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+    }
+    .nav-btn .svg-icon {
+      width: 15px;
+      height: 15px;
+      stroke-width: 1.85;
+      color: #94a3b8;
+      transition: color 0.16s ease;
+    }
+    .nav-btn:hover .svg-icon,
+    .nav-btn.active .svg-icon {
+      color: inherit;
     }
     .nav-count-badge {
-      background: #2563eb;
-      color: #fff;
+      background: rgba(255, 255, 255, 0.06);
+      color: #cbd5e1;
       font-size: 0.65rem;
-      padding: 0.05rem 0.35rem;
-      border-radius: 10px;
-      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-weight: 600;
       line-height: 1.2;
+      font-family: var(--font-mono, monospace);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      transition: all 0.16s ease;
+    }
+    .nav-btn.active .nav-count-badge {
+      background: rgba(99, 102, 241, 0.25);
+      color: #c7d2fe;
+      border-color: rgba(99, 102, 241, 0.4);
     }
     .nav-micro-badge {
-      font-size: 0.6rem;
+      font-size: 0.58rem;
       font-weight: 700;
       letter-spacing: 0.04em;
       padding: 1px 5px;
       border-radius: 4px;
       line-height: 1.2;
     }
+    .nav-badge-flux {
+      background: rgba(168, 85, 247, 0.12);
+      color: #d8b4fe;
+      border: 1px solid rgba(168, 85, 247, 0.25);
+    }
 
     /* Right Action Bar */
     .header-actions {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.6rem;
       flex-shrink: 0;
     }
     .header-search-btn {
       display: inline-flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.55rem;
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid rgba(255, 255, 255, 0.07);
       color: #94a3b8;
       font-size: 0.775rem;
       font-weight: 500;
-      padding: 0 0.65rem;
+      padding: 0 0.75rem;
       height: 32px;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
       transition: all 0.15s ease;
       font-family: inherit;
@@ -259,12 +307,29 @@
       color: #f1f5f9;
     }
     .header-search-btn:focus-visible {
-      border-color: var(--blue);
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+    }
+    .header-search-btn .svg-icon {
+      width: 14px;
+      height: 14px;
+      color: #64748b;
     }
     .search-placeholder {
-      font-size: 0.75rem;
+      font-size: 0.775rem;
       color: #64748b;
+      letter-spacing: -0.01em;
+    }
+    .kbd-badge {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      font-family: var(--font-mono, monospace);
+      color: #94a3b8;
+      line-height: 1.2;
     }
 
     /* Segmented Utility Group */
@@ -273,17 +338,19 @@
       align-items: center;
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid rgba(255, 255, 255, 0.07);
-      border-radius: 6px;
+      border-radius: 8px;
       padding: 2px;
-      gap: 2px;
+      gap: 1px;
+      height: 32px;
+      box-sizing: border-box;
     }
     .header-tool-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       width: 28px;
-      height: 28px;
-      border-radius: 4px;
+      height: 26px;
+      border-radius: 6px;
       background: transparent;
       border: none;
       color: #94a3b8;
@@ -294,70 +361,86 @@
       padding: 0;
     }
     .header-tool-btn:hover {
-      background: rgba(255, 255, 255, 0.06);
-      color: #f1f5f9;
+      background: rgba(255, 255, 255, 0.07);
+      color: #f8fafc;
     }
     .header-tool-btn.active {
-      color: #60a5fa;
-      background: rgba(59, 130, 246, 0.12);
+      color: #818cf8;
+      background: rgba(99, 102, 241, 0.12);
     }
     .header-tool-btn:focus-visible {
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
     }
     .header-tool-btn .svg-icon {
-      width: 15px;
-      height: 15px;
+      width: 14px;
+      height: 14px;
+      stroke-width: 1.85;
     }
     .header-tool-btn .tool-count {
       position: absolute;
-      top: -2px;
-      right: -2px;
-      background: #2563eb;
+      top: -3px;
+      right: -3px;
+      background: #4f46e5;
       color: #fff;
       font-size: 0.55rem;
       font-weight: 700;
       padding: 1px 4px;
-      border-radius: 8px;
+      border-radius: 999px;
       line-height: 1;
-      border: 1px solid #090a0f;
+      border: 1px solid #080a10;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
     }
 
-    /* Telemetry Status Badge */
+    /* Telemetry Status Capsule */
     .telemetry-pill {
       display: inline-flex;
       align-items: center;
-      gap: 0.45rem;
+      gap: 0.5rem;
       font-size: 0.725rem;
       font-weight: 500;
-      color: #94a3b8;
+      color: #cbd5e1;
       background: rgba(255, 255, 255, 0.03);
-      padding: 0 0.65rem;
+      padding: 0 0.75rem;
       height: 32px;
-      border-radius: 6px;
+      border-radius: 8px;
       border: 1px solid rgba(255, 255, 255, 0.07);
       white-space: nowrap;
-      max-width: 190px;
+      cursor: default;
+      transition: all 0.15s ease;
+      box-sizing: border-box;
+    }
+    .telemetry-pill:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.12);
     }
     .telemetry-dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
       background: #10b981;
-      box-shadow: 0 0 8px #10b981;
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
       flex-shrink: 0;
+      animation: pulseGreen 2.5s infinite ease-in-out;
+    }
+    @keyframes pulseGreen {
+      0%, 100% { opacity: 0.7; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.15); box-shadow: 0 0 10px #10b981; }
     }
     .telemetry-desktop {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      font-family: var(--font-mono, monospace);
+      font-size: 0.7rem;
+      letter-spacing: -0.01em;
     }
 
     @media (max-width: 1360px) {
       header {
-        padding: 0 0.85rem;
+        padding: 0 1rem;
       }
       .nav-btn {
-        padding: 0.35rem 0.55rem;
+        padding: 0 0.65rem;
         font-size: 0.775rem;
         gap: 0.35rem;
       }
@@ -365,8 +448,7 @@
         font-size: 0.9rem;
       }
       .telemetry-pill {
-        max-width: 140px;
-        padding: 0 0.5rem;
+        padding: 0 0.55rem;
       }
     }
     @media (max-width: 1180px) {
@@ -377,7 +459,7 @@
         display: none;
       }
       .nav-btn {
-        padding: 0.35rem 0.45rem;
+        padding: 0 0.55rem;
       }
     }
 
@@ -661,6 +743,198 @@
       background: linear-gradient(135deg, #3b82f6, #2563eb);
       box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
       transform: translateY(-1px);
+    }
+    .trending-action-row {
+      display: flex;
+      gap: 0.35rem;
+      width: 100%;
+      margin-top: 0.2rem;
+    }
+    .trending-stream-publish-btn {
+      flex: 1;
+      background: linear-gradient(135deg, #4f46e5, #4338ca);
+      color: #fff;
+      border: 1px solid rgba(129, 140, 248, 0.35);
+      border-radius: var(--radius-sm);
+      padding: 0.45rem 0.5rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      transition: all 0.15s ease;
+      font-family: inherit;
+      box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+    }
+    .trending-stream-publish-btn:hover {
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.45);
+      transform: translateY(-1px);
+    }
+    .trending-preview-btn {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.45rem 0.55rem;
+      font-size: 0.7rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+    .trending-preview-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    /* Loading States and Processing Animations */
+    @keyframes shimmerSweep {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    @keyframes soundBarWave {
+      0%, 100% { height: 4px; }
+      50% { height: 16px; }
+    }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.65; transform: scale(0.98); }
+      50% { opacity: 1; transform: scale(1.02); filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.6)); }
+    }
+    @keyframes gearSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .skeleton-shimmer {
+      background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+      background-size: 200% 100%;
+      animation: shimmerSweep 1.6s infinite linear;
+      border-radius: var(--radius-sm);
+    }
+    .trending-skeleton-card {
+      min-width: 250px;
+      max-width: 250px;
+      height: 235px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.65rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .status-pill-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.675rem;
+      font-weight: 700;
+    }
+    .status-pill-queued {
+      background: rgba(245, 158, 11, 0.12);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .status-pill-processing {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+    }
+    .status-pill-completed {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+    .status-pill-failed {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+    .sound-bars-anim {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 16px;
+      vertical-align: middle;
+    }
+    .sound-bars-anim span {
+      width: 2.5px;
+      background: var(--accent);
+      border-radius: 1px;
+      animation: soundBarWave 0.85s infinite ease-in-out;
+    }
+    .sound-bars-anim span:nth-child(2) { animation-delay: 0.15s; }
+    .sound-bars-anim span:nth-child(3) { animation-delay: 0.3s; }
+    .sound-bars-anim span:nth-child(4) { animation-delay: 0.45s; }
+    .indeterminate-bar {
+      width: 100% !important;
+      background: linear-gradient(90deg, #4f46e5 0%, #06b6d4 50%, #4f46e5 100%) !important;
+      background-size: 200% 100% !important;
+      animation: shimmerSweep 1.5s infinite linear !important;
+    }
+    .stc-steps-timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+    .stc-step-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.55rem 0.75rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.775rem;
+      transition: all 0.2s ease;
+    }
+    .stc-step-item.active {
+      border-color: rgba(99, 102, 241, 0.6);
+      background: rgba(99, 102, 241, 0.08);
+    }
+    .stc-step-item.done {
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.05);
+    }
+    .stc-step-item.failed {
+      border-color: rgba(239, 68, 68, 0.5);
+      background: rgba(239, 68, 68, 0.08);
+    }
+    .stc-step-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .stc-step-waiting .stc-step-icon {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+    }
+    .stc-step-active .stc-step-icon {
+      background: rgba(99, 102, 241, 0.25);
+      color: #818cf8;
+      animation: pulseGlow 1.2s infinite ease-in-out;
+    }
+    .stc-step-done .stc-step-icon {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+    .stc-step-failed .stc-step-icon {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
     }
 
 
@@ -2990,11 +3264,11 @@
   <header>
     <a href="#" class="brand" onclick="switchView('studio'); return false;" aria-label="YouTube Clipping Studio Home">
       <div class="brand-icon" aria-hidden="true">
-        <svg class="svg-icon" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+        <svg class="svg-icon" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="3"></rect><path d="M7 4v16M17 4v16M2 12h20"></path></svg>
       </div>
       <div class="brand-text">
         <h1 class="brand-title">YT Clip Studio</h1>
-        <span class="brand-badge">PRO v2.4</span>
+        <span class="brand-badge">v2.4 PRO</span>
       </div>
     </a>
 
@@ -3017,9 +3291,9 @@
         <span class="nav-count-badge" id="projectCountBadge">0</span>
       </button>
       <button class="nav-btn" id="navFlux" onclick="switchView('flux')" role="tab" aria-selected="false">
-        <svg class="svg-icon" viewBox="0 0 24 24" style="color: #c084fc;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
-        <span>FLUX AI</span>
-        <span class="nav-micro-badge" style="background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3);">FREE</span>
+        <svg class="svg-icon" viewBox="0 0 24 24" style="color: #c084fc;"><path d="M12 2L14.4 7.6L20 10L14.4 12.4L12 18L9.6 12.4L4 10L9.6 7.6L12 2Z"></path><path d="M18 16L19.2 18.8L22 20L19.2 21.2L18 24L16.8 21.2L14 20L16.8 18.8L18 16Z"></path></svg>
+        <span>FLUX.1</span>
+        <span class="nav-micro-badge nav-badge-flux">AI</span>
       </button>
       <button class="nav-btn" id="navSettings" onclick="switchView('settings')" role="tab" aria-selected="false">
         <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -3038,7 +3312,7 @@
       <!-- Segmented Utilities: Queue, Sound, Shortcuts -->
       <div class="header-util-group">
         <button class="header-tool-btn" id="batchDrawerBtn" onclick="toggleBatchDrawer()" aria-label="Render Queue Monitor" title="Render Queue Monitor">
-          <svg class="svg-icon" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+          <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
           <span class="tool-count" id="queueCountBadge">0</span>
         </button>
 
@@ -3120,6 +3394,10 @@
               <span>Top Trending from Channels &gt; 10M Subscribers</span>
             </div>
             <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <button type="button" class="btn btn-primary" onclick="streamAndPublishTopTrending()" style="font-size: 0.72rem; padding: 0.25rem 0.65rem; display: inline-flex; align-items: center; gap: 0.35rem; background: linear-gradient(135deg, #4f46e5, #4338ca); border-color: rgba(129, 140, 248, 0.4);" title="Stream and publish the #1 top trending video directly">
+                <svg class="svg-icon" viewBox="0 0 24 24" style="width: 13px; height: 13px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>⚡ Stream #1 &amp; Publish</span>
+              </button>
               <button type="button" class="btn btn-secondary" onclick="openOvernightBatchModal()" style="font-size: 0.72rem; padding: 0.25rem 0.65rem; display: inline-flex; align-items: center; gap: 0.35rem; border-color: rgba(168, 85, 247, 0.45); color: #c084fc; background: rgba(168, 85, 247, 0.08);" title="Configure overnight batch execution for top trending videos">
                 <svg class="svg-icon" viewBox="0 0 24 24" style="width: 14px; height: 14px; stroke-width: 2;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
                 <span>🌙 Overnight Batch (Top 10)</span>
@@ -4286,10 +4564,19 @@
                 <div style="font-size: 0.75rem; margin-top: 4px;">Choose a style and prompt on the left to render an asset via FLUX.1 Schnell.</div>
               </div>
 
-              <div id="fluxLoadingState" style="display: none; flex-direction: column; align-items: center; gap: 0.75rem; padding: 2rem;">
-                <div class="spinner" style="width: 32px; height: 32px;"></div>
-                <span style="font-size: 0.825rem; color: var(--text-secondary);">Querying Cloudflare Workers AI Edge Inference...</span>
-                <span style="font-size: 0.72rem; color: var(--text-muted);">Model: @cf/black-forest-labs/flux-1-schnell (4 Steps)</span>
+              <div id="fluxLoadingState" style="display: none; flex-direction: column; align-items: center; gap: 0.85rem; padding: 2rem 1rem; text-align: center;">
+                <div style="width: 44px; height: 44px; border-radius: 50%; background: rgba(99, 102, 241, 0.15); border: 2px solid rgba(99, 102, 241, 0.4); display: flex; align-items: center; justify-content: center;">
+                  <svg class="svg-icon" viewBox="0 0 24 24" style="width: 22px; height: 22px; color: #818cf8; animation: gearSpin 2s linear infinite;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                </div>
+                <div>
+                  <div style="font-size: 0.85rem; font-weight: 700; color: #fff;">FLUX.1 Schnell Diffusion Active</div>
+                  <div style="font-size: 0.725rem; color: #94a3b8; margin-top: 2px;">Cloudflare Workers AI (4 Steps Edge Inference)</div>
+                </div>
+                <div style="display: flex; gap: 0.35rem; justify-content: center; margin-top: 0.2rem;">
+                  <span class="status-pill-badge status-pill-processing" style="font-size: 0.65rem;">Step 1: Latent Init</span>
+                  <span class="status-pill-badge status-pill-processing" style="font-size: 0.65rem;">Step 2: Denoise</span>
+                  <span class="status-pill-badge status-pill-processing" style="font-size: 0.65rem;">Step 3: Decode</span>
+                </div>
               </div>
 
               <img id="fluxResultImg" class="flux-preview-img" width="768" height="1344" style="display: none;" alt="FLUX.1 Generated Visual">
@@ -4372,6 +4659,58 @@
       <div class="cmd-footer">
         <span>Use <kbd>↑</kbd> <kbd>↓</kbd> to navigate, <kbd>↵</kbd> to select, <kbd>ESC</kbd> to dismiss</span>
         <span>Shortcut: <kbd>Ctrl</kbd> + <kbd>K</kbd></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- StreamToClipper Workflow & Publishing Tracker Modal -->
+  <div class="batch-modal-overlay" id="streamToClipperModal" style="display: none;" role="dialog" aria-modal="true" aria-label="StreamToClipper Pipeline Tracker">
+    <div class="batch-modal-dialog" style="max-width: 620px;">
+      <div class="batch-modal-header">
+        <div>
+          <h2>
+            <svg class="svg-icon" viewBox="0 0 24 24" style="color: #818cf8;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <span>StreamToClipper Publishing Pipeline</span>
+          </h2>
+          <p>Direct clipping from verified 10M+ channel into multi-platform publishing.</p>
+        </div>
+        <button type="button" class="batch-modal-close" onclick="closeStreamToClipperModal()" aria-label="Close StreamToClipper Modal">&times;</button>
+      </div>
+
+      <div class="batch-modal-body">
+        <div id="stcVideoInfo" style="display: flex; align-items: center; gap: 0.75rem; background: #11141c; border: 1px solid #1a2030; border-radius: 8px; padding: 0.65rem 0.85rem;">
+          <!-- Populated dynamically -->
+        </div>
+
+        <div>
+          <div style="font-size: 0.75rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.45rem; text-transform: uppercase; letter-spacing: 0.04em;">Processing Stages</div>
+          <div class="stc-steps-timeline" id="stcTimeline">
+            <!-- Populated dynamically via JS -->
+          </div>
+        </div>
+
+        <div style="background: #11141c; border: 1px solid #1a2030; border-radius: 8px; padding: 0.85rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">
+            <div style="display: flex; align-items: center; gap: 0.45rem;">
+              <span class="status-pill-badge status-pill-processing" id="stcStatusBadge">Processing</span>
+              <span style="font-size: 0.75rem; font-weight: 700; color: #fff;" id="stcStageTitle">Pipeline Active</span>
+            </div>
+            <span id="stcElapsedTimer" style="font-size: 0.7rem; font-family: monospace; color: var(--text-muted);">00:00s elapsed</span>
+          </div>
+          <div class="progress-bar-bg" style="height: 7px; margin-bottom: 0.5rem;">
+            <div class="progress-bar-fill" id="stcProgressBar" style="width: 5%; background: linear-gradient(90deg, #4f46e5, #06b6d4);"></div>
+          </div>
+          <div id="stcStatusMessage" style="font-size: 0.725rem; color: #94a3b8; line-height: 1.45;">
+            Contacting Clipping Studio backend...
+          </div>
+        </div>
+
+        <div id="stcResultContainer" style="display: none;"></div>
+      </div>
+
+      <div class="batch-modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeStreamToClipperModal()">Dismiss</button>
+        <button type="button" class="btn btn-primary" id="stcActionBtn" style="display: none;" onclick="handleSTCAction()">View Clip</button>
       </div>
     </div>
   </div>
@@ -4883,11 +5222,38 @@
     });
 
     // ============================================================================
-    // Top Trending Videos from 10M+ Channels Feed & Streaming
+    // Top Trending Videos from 10M+ Channels Feed & StreamToClipper Workflow
     // ============================================================================
+    let activeSTCPollTimer = null;
+    let activeSTCJobId = null;
+    let stcStartTime = null;
+    let stcCompletedClip = null;
+
     async function loadTrending10M() {
       const tray = document.getElementById('trendingTray');
       if (!tray) return;
+
+      // Show animated skeleton placeholders during discovery
+      tray.innerHTML = `
+        <div class="trending-skeleton-card">
+          <div class="skeleton-shimmer" style="height: 125px; width: 100%;"></div>
+          <div class="skeleton-shimmer" style="height: 14px; width: 60%;"></div>
+          <div class="skeleton-shimmer" style="height: 24px; width: 90%;"></div>
+          <div class="skeleton-shimmer" style="height: 28px; width: 100%;"></div>
+        </div>
+        <div class="trending-skeleton-card">
+          <div class="skeleton-shimmer" style="height: 125px; width: 100%;"></div>
+          <div class="skeleton-shimmer" style="height: 14px; width: 50%;"></div>
+          <div class="skeleton-shimmer" style="height: 24px; width: 85%;"></div>
+          <div class="skeleton-shimmer" style="height: 28px; width: 100%;"></div>
+        </div>
+        <div class="trending-skeleton-card">
+          <div class="skeleton-shimmer" style="height: 125px; width: 100%;"></div>
+          <div class="skeleton-shimmer" style="height: 14px; width: 70%;"></div>
+          <div class="skeleton-shimmer" style="height: 24px; width: 95%;"></div>
+          <div class="skeleton-shimmer" style="height: 28px; width: 100%;"></div>
+        </div>
+      `;
 
       try {
         const res = await fetch('/api/v1/trending/top10m?limit=10');
@@ -4898,26 +5264,37 @@
           return;
         }
 
-        tray.innerHTML = videos.map(v => `
-          <button type="button" class="trending-card" onclick="streamTrendingVideo('${v.url}')" aria-label="Stream ${sanitizeHTML(v.title)} to Clipper">
-            <img src="${v.thumbnail_url || 'https://i.ytimg.com/vi/' + v.video_id + '/hqdefault.jpg'}" class="trending-thumb" width="240" height="135" alt="${sanitizeHTML(v.title)}">
-            <div class="trending-meta">
-              <span class="trending-creator">${sanitizeHTML(v.channel_name)}</span>
-              <span class="trending-subs-pill">${sanitizeHTML(v.channel_subscribers_formatted)} Subs</span>
+        tray.innerHTML = videos.map(v => {
+          const thumb = v.thumbnail_url || 'https://i.ytimg.com/vi/' + v.video_id + '/hqdefault.jpg';
+          const titleEsc = sanitizeHTML(v.title || '').replace(/'/g, "\\'");
+          const creatorEsc = sanitizeHTML(v.channel_name || '').replace(/'/g, "\\'");
+          return `
+            <div class="trending-card">
+              <img src="${thumb}" class="trending-thumb" width="240" height="135" alt="${sanitizeHTML(v.title)}">
+              <div class="trending-meta">
+                <span class="trending-creator">${sanitizeHTML(v.channel_name)}</span>
+                <span class="trending-subs-pill">${sanitizeHTML(v.channel_subscribers_formatted)} Subs</span>
+              </div>
+              <div class="trending-title" title="${sanitizeHTML(v.title)}">${sanitizeHTML(v.title)}</div>
+              <div style="font-size:0.675rem; color:var(--text-muted); display:flex; justify-content:space-between; margin-bottom: 0.2rem;">
+                <span>${v.duration_formatted || '00:00'}</span>
+                <span style="color: #60a5fa; font-weight: 600;">Virality: ${v.virality_score || 85}/100</span>
+              </div>
+              <div class="trending-action-row">
+                <button type="button" class="trending-stream-publish-btn" onclick="streamAndPublishTrending('${v.url}', '${titleEsc}', '${thumb}', '${creatorEsc}')" title="Directly generate solid Short and publish via StreamToClipper">
+                  <svg class="svg-icon" viewBox="0 0 24 24" style="width:12px; height:12px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                  <span>Stream &amp; Publish</span>
+                </button>
+                <button type="button" class="trending-preview-btn" onclick="streamTrendingVideo('${v.url}')" title="Load into Video Editor">
+                  Edit
+                </button>
+              </div>
             </div>
-            <div class="trending-title" title="${sanitizeHTML(v.title)}">${sanitizeHTML(v.title)}</div>
-            <div style="font-size:0.675rem; color:var(--text-muted); display:flex; justify-content:space-between;">
-              <span>${v.duration_formatted || '00:00'}</span>
-              <span>Score: ${v.virality_score || 85}/100</span>
-            </div>
-            <span class="trending-action-btn">
-              <svg class="svg-icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-              <span>Stream to Clipper</span>
-            </span>
-          </button>
-        `).join('');
+          `;
+        }).join('');
       } catch (err) {
         console.warn('Could not load 10M trending:', err);
+        tray.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted); padding:0.5rem;">Could not load trending feeds. Use quick presets below.</div>';
       }
     }
 
@@ -4926,17 +5303,302 @@
       SoundFX.playClick();
       const input = document.getElementById('videoInput');
       if (input) input.value = url;
-      showToast('Loaded 10M+ trending video! Analyzing...');
+      showToast('Loaded trending video into editor');
       runPreview();
     }
 
-    function streamTopTrending10M() {
-      const firstBtn = document.querySelector('.trending-action-btn');
-      if (firstBtn) {
-        firstBtn.click();
+    function streamAndPublishTopTrending() {
+      SoundFX.playClick();
+      if (cachedTrendingList && cachedTrendingList.length > 0) {
+        const top = cachedTrendingList[0];
+        const thumb = top.thumbnail_url || 'https://i.ytimg.com/vi/' + top.video_id + '/hqdefault.jpg';
+        const titleEsc = (top.title || '').replace(/'/g, "\\'");
+        const creatorEsc = (top.channel_name || '').replace(/'/g, "\\'");
+        streamAndPublishTrending(top.url, titleEsc, thumb, creatorEsc);
       } else {
-        streamTrendingVideo('https://www.youtube.com/watch?v=vS6HEes8daw');
+        streamAndPublishTrending('https://www.youtube.com/watch?v=vS6HEes8daw', '10M+ Creator Highlight', '', 'Verified Creator');
       }
+    }
+
+    // StreamToClipper Workflow Tracker Controller
+    const STC_STAGES = [
+      { id: 'disc', name: 'Discovery & Rights Clearance', desc: 'Validating content rights and fetching stream manifest' },
+      { id: 'trans', name: 'Audio Ingestion & Alignment', desc: 'Generating word-level speech alignments and energy profiles' },
+      { id: 'gemini', name: 'Gemini Creative Intelligence', desc: 'Scoring viral narrative arc, hook strength, and pacing' },
+      { id: 'flux', name: 'Strategic FLUX.1 Visual Synthesis', desc: 'Synthesizing context-aware 9:16 visual hook and Ken Burns motion' },
+      { id: 'render', name: 'Vertical Short 9:16 Rendering', desc: 'FFmpeg active-speaker framing, GPU acceleration, and Hormozi subtitles' },
+      { id: 'publish', name: 'QA Verification & Multi-Publishing', desc: 'Broadcast QA validation and delivery to distribution inbox' }
+    ];
+
+    function streamAndPublishTrending(url, title, thumb, creator) {
+      if (!url) return;
+      SoundFX.playClick();
+      openStreamToClipperModal({ url, title, thumb, creator });
+    }
+
+    async function openStreamToClipperModal(info) {
+      const modal = document.getElementById('streamToClipperModal');
+      if (!modal) return;
+      modal.style.display = 'flex';
+
+      // Set video info card
+      const vInfoEl = document.getElementById('stcVideoInfo');
+      if (vInfoEl) {
+        vInfoEl.innerHTML = `
+          <img src="${info.thumb || 'https://i.ytimg.com/vi/placeholder/hqdefault.jpg'}" width="72" height="42" style="width: 72px; height: 42px; object-fit: cover; border-radius: 4px; background: #000;" alt="Thumbnail">
+          <div style="overflow: hidden; flex: 1;">
+            <div style="font-size: 0.775rem; font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sanitizeHTML(info.title || 'Trending Video')}</div>
+            <div style="font-size: 0.675rem; color: #94a3b8; margin-top: 2px;">${sanitizeHTML(info.creator || 'Verified Channel')} • Target: Watched Inbox / Multi-Platform</div>
+          </div>
+        `;
+      }
+
+      // Reset state and controls
+      stcCompletedClip = null;
+      document.getElementById('stcResultContainer').style.display = 'none';
+      document.getElementById('stcActionBtn').style.display = 'none';
+      document.getElementById('stcStatusBadge').className = 'status-pill-badge status-pill-processing';
+      document.getElementById('stcStatusBadge').innerText = 'Initializing';
+      document.getElementById('stcStageTitle').innerText = 'Starting Pipeline';
+      document.getElementById('stcStatusMessage').innerText = 'Connecting to backend and allocating GPU encoding slots...';
+      document.getElementById('stcProgressBar').style.width = '6%';
+
+      renderSTCTimeline(0);
+      startSTCTimer();
+
+      try {
+        const layoutVal = document.getElementById('layoutSelect')?.value || 'active_speaker';
+        const subtitleVal = document.getElementById('subtitlePresetSelect')?.value || 'hormozi';
+
+        const res = await fetch('/api/v1/trending/stream-to-clipper', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            video_id_or_url: info.url,
+            max_clips: 1,
+            layout: layoutVal,
+            subtitle_preset: subtitleVal,
+            gpu: true,
+            auto_publish: true,
+            platforms: ['youtube_shorts', 'instagram_reels', 'tiktok'],
+            target: 'watched_folder',
+            approved_by_user: true,
+            enable_flux: true
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || 'Could not initiate StreamToClipper pipeline.');
+        }
+
+        activeSTCJobId = data.job_id || data.task_id;
+        pollStreamToClipperJob(activeSTCJobId);
+      } catch (err) {
+        showSTCFailure(err.message || 'Pipeline startup failed.');
+      }
+    }
+
+    function renderSTCTimeline(activeIndex, isFailed = false) {
+      const container = document.getElementById('stcTimeline');
+      if (!container) return;
+
+      container.innerHTML = STC_STAGES.map((st, idx) => {
+        let stateClass = 'stc-step-waiting';
+        let iconHtml = `${idx + 1}`;
+
+        if (idx < activeIndex) {
+          stateClass = 'stc-step-done';
+          iconHtml = '✓';
+        } else if (idx === activeIndex) {
+          stateClass = isFailed ? 'stc-step-failed' : 'stc-step-active';
+          iconHtml = isFailed ? '✕' : '▶';
+        }
+
+        return `
+          <div class="stc-step-item ${stateClass}">
+            <div class="stc-step-icon">${iconHtml}</div>
+            <div style="flex: 1;">
+              <div style="font-weight: 700; color: ${idx <= activeIndex ? '#fff' : '#64748b'};">${st.name}</div>
+              <div style="font-size: 0.675rem; color: #94a3b8; margin-top: 1px;">${st.desc}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    let stcTimerInterval = null;
+    function startSTCTimer() {
+      if (stcTimerInterval) clearInterval(stcTimerInterval);
+      stcStartTime = Date.now();
+      const timerEl = document.getElementById('stcElapsedTimer');
+      stcTimerInterval = setInterval(() => {
+        const sec = Math.floor((Date.now() - stcStartTime) / 1000);
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        if (timerEl) timerEl.innerText = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s} elapsed`;
+      }, 1000);
+    }
+
+    function stopSTCTimer() {
+      if (stcTimerInterval) {
+        clearInterval(stcTimerInterval);
+        stcTimerInterval = null;
+      }
+    }
+
+    function pollStreamToClipperJob(jobId) {
+      if (activeSTCPollTimer) clearInterval(activeSTCPollTimer);
+
+      activeSTCPollTimer = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/v1/jobs/${jobId}`);
+          if (!res.ok) return;
+          const job = await res.json();
+          updateSTCProgress(job);
+        } catch (e) {
+          console.warn('STC poll note:', e);
+        }
+      }, 1200);
+    }
+
+    function updateSTCProgress(job) {
+      const p = job.progress || 5;
+      const stage = (job.current_stage || job.status || '').toLowerCase();
+      const msg = job.message || 'Processing pipeline stages...';
+
+      const bar = document.getElementById('stcProgressBar');
+      const badge = document.getElementById('stcStatusBadge');
+      const title = document.getElementById('stcStageTitle');
+      const msgEl = document.getElementById('stcStatusMessage');
+
+      if (bar) bar.style.width = `${Math.max(5, p)}%`;
+      if (msgEl) msgEl.innerText = msg;
+      if (title) title.innerText = job.current_stage ? `Stage: ${job.current_stage.toUpperCase()}` : 'Processing';
+
+      // Map progress to timeline stage index (0 to 5)
+      let stageIdx = 0;
+      if (p >= 20) stageIdx = 1;
+      if (p >= 40) stageIdx = 2;
+      if (p >= 60) stageIdx = 3;
+      if (p >= 75) stageIdx = 4;
+      if (p >= 90) stageIdx = 5;
+
+      renderSTCTimeline(stageIdx);
+
+      if (job.status === 'COMPLETED' || job.status === 'completed') {
+        if (activeSTCPollTimer) clearInterval(activeSTCPollTimer);
+        stopSTCTimer();
+
+        if (bar) {
+          bar.style.width = '100%';
+          bar.style.background = 'var(--emerald)';
+        }
+        if (badge) {
+          badge.className = 'status-pill-badge status-pill-completed';
+          badge.innerText = 'Completed & Published';
+        }
+        renderSTCTimeline(6); // all done
+
+        showSTCSuccess(job);
+      } else if (job.status === 'FAILED' || job.status === 'failed') {
+        if (activeSTCPollTimer) clearInterval(activeSTCPollTimer);
+        stopSTCTimer();
+        showSTCFailure(job.error || job.message || 'Pipeline operation failed.');
+      }
+    }
+
+    function showSTCSuccess(job) {
+      SoundFX.playSuccess();
+      const resContainer = document.getElementById('stcResultContainer');
+      const actionBtn = document.getElementById('stcActionBtn');
+
+      const clip = (job.clips && job.clips.length > 0) ? job.clips[0] : null;
+      stcCompletedClip = clip;
+
+      let receiptsHtml = '';
+      if (job.receipts && job.receipts.length > 0) {
+        const rcpt = job.receipts[0];
+        receiptsHtml = `
+          <div style="font-size: 0.675rem; color: #a7f3d0; margin-top: 4px; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <span>Receipt: <strong>${sanitizeHTML(rcpt.receipt_id || 'rcpt_ok')}</strong></span>
+            <span>Target: <strong>${sanitizeHTML(rcpt.target_mode || 'watched_folder')}</strong></span>
+            <span>Status: <strong>${sanitizeHTML(rcpt.status || 'DELIVERED')}</strong></span>
+          </div>
+        `;
+      }
+
+      if (resContainer) {
+        resContainer.style.display = 'block';
+        resContainer.innerHTML = `
+          <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 8px; padding: 0.85rem; display: flex; gap: 0.85rem; align-items: center;">
+            <div style="width: 52px; height: 92px; border-radius: 4px; background: #000; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+              ${clip && clip.url ? `<video src="${clip.url}" style="width: 100%; height: 100%; object-fit: cover;" muted autoplay loop playsinline></video>` : '<span style="font-size: 1.5rem;">🎬</span>'}
+            </div>
+            <div style="flex: 1; overflow: hidden;">
+              <div style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 2px;">
+                <span class="status-pill-badge status-pill-completed">✓ Published Short</span>
+                <span style="font-size: 0.675rem; color: var(--text-muted);">${clip ? clip.duration + 's' : ''}</span>
+              </div>
+              <div style="font-size: 0.8rem; font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                ${sanitizeHTML(clip ? (clip.hook_title || 'Generated Short') : 'Solid Short')}
+              </div>
+              ${receiptsHtml}
+            </div>
+          </div>
+        `;
+      }
+
+      if (actionBtn) {
+        actionBtn.style.display = 'inline-flex';
+        actionBtn.innerText = 'Watch in Studio';
+      }
+
+      showToast('StreamToClipper Short rendered and published!');
+      loadPublishHistory();
+      loadRecentClips();
+      loadProjects();
+    }
+
+    function showSTCFailure(errorMsg) {
+      const resContainer = document.getElementById('stcResultContainer');
+      const badge = document.getElementById('stcStatusBadge');
+      const bar = document.getElementById('stcProgressBar');
+
+      if (badge) {
+        badge.className = 'status-pill-badge status-pill-failed';
+        badge.innerText = 'Failed';
+      }
+      if (bar) bar.style.background = 'var(--crimson)';
+
+      if (resContainer) {
+        resContainer.style.display = 'block';
+        resContainer.innerHTML = `
+          <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 0.85rem;">
+            <div style="font-size: 0.775rem; font-weight: 700; color: #f87171; margin-bottom: 4px;">Pipeline Encountered an Issue</div>
+            <div style="font-size: 0.72rem; color: #cbd5e1; line-height: 1.4;">${sanitizeHTML(errorMsg)}</div>
+          </div>
+        `;
+      }
+    }
+
+    function handleSTCAction() {
+      closeStreamToClipperModal();
+      if (stcCompletedClip && stcCompletedClip.clip_id) {
+        openVideoEditorModal(stcCompletedClip.clip_id);
+      } else {
+        switchView('publish');
+      }
+    }
+
+    function closeStreamToClipperModal() {
+      if (activeSTCPollTimer) {
+        clearInterval(activeSTCPollTimer);
+        activeSTCPollTimer = null;
+      }
+      stopSTCTimer();
+      const modal = document.getElementById('streamToClipperModal');
+      if (modal) modal.style.display = 'none';
     }
 
     // ============================================================================
@@ -5348,32 +6010,29 @@ Storage Base Path:    ${data.storage.data_dir}
       const aTimer = document.getElementById('analysisTimerLabel');
       const aStage = document.getElementById('analysisStageLabel');
 
-      // Enable Analysis Loading Banner
+      // Enable Analysis Loading Banner with Indeterminate Bar & Pacing Telemetry
       aCard.style.display = 'flex';
       btnPreview.disabled = true;
       btnPreview.style.opacity = '0.7';
-      btnPreviewText.innerHTML = '<span class="spinner" style="margin-right:0.4rem;"></span>Analyzing (~5-8s)...';
+      btnPreviewText.innerHTML = '<span class="sound-bars-anim" style="margin-right:0.45rem;"><span></span><span></span><span></span><span></span></span><span>Analyzing Narrative...</span>';
 
       const tStart = Date.now();
-      let simPct = 15;
-      aBar.style.width = '15%';
-      aStage.innerText = 'Step 1/2: Ingesting video metadata & captions...';
-      aMsg.innerText = 'Querying YouTube Data API v3 (or yt-dlp fallback)...';
+      aBar.classList.add('indeterminate-bar');
+      aStage.innerText = 'Phase 1: Ingesting video stream & speech timestamps...';
+      aMsg.innerText = 'Extracting audio spectrogram, word alignments & content rights...';
 
       if (analysisTimerInterval) clearInterval(analysisTimerInterval);
       analysisTimerInterval = setInterval(() => {
         const sec = Math.floor((Date.now() - tStart) / 1000);
-        const rem = Math.max(0, 6 - sec);
-        aTimer.innerText = `Elapsed: 00:${sec < 10 ? '0' : ''}${sec} • Est: ~${rem}s remaining`;
-        if (simPct < 85) {
-          simPct += 12;
-          aBar.style.width = `${simPct}%`;
-          if (simPct > 45) {
-            aStage.innerText = 'Step 2/2: Scoring narrative coherence & viral hooks...';
-            aMsg.innerText = 'Evaluating opening hooks, speech energy, and arc completeness with SolidShortsDecider...';
-          }
+        aTimer.innerText = `Elapsed: 00:${sec < 10 ? '0' : ''}${sec} • Indeterminate API Processing`;
+        if (sec >= 3 && sec < 6) {
+          aStage.innerText = 'Phase 2: Gemini Creative Intelligence evaluating hooks & pacing...';
+          aMsg.innerText = 'Analyzing narrative tension, replay heatmap signals, and standalone viability...';
+        } else if (sec >= 6) {
+          aStage.innerText = 'Phase 3: Strategic visual intervention & FLUX prompt assessment...';
+          aMsg.innerText = 'Checking local stock assets and determining whether AI imagery is justified...';
         }
-      }, 700);
+      }, 1000);
 
       try {
         const res = await fetch('/api/v1/preview', {
@@ -5392,9 +6051,10 @@ Storage Base Path:    ${data.storage.data_dir}
 
         // Complete analysis animation
         clearInterval(analysisTimerInterval);
+        aBar.classList.remove('indeterminate-bar');
         aBar.style.width = '100%';
         aBar.style.background = 'var(--emerald)';
-        aStage.innerText = 'Analysis Complete!';
+        aStage.innerText = 'Analysis Complete';
         aMsg.innerText = `Discovered ${(data.candidates || []).length} coherent clipping opportunities.`;
 
         activeVideoData = data;
@@ -5481,7 +6141,7 @@ Storage Base Path:    ${data.storage.data_dir}
 
       btnRender.disabled = true;
       btnRender.style.opacity = '0.7';
-      btnRenderText.innerHTML = '<span class="spinner" style="margin-right:0.4rem;"></span>Rendering...';
+      btnRenderText.innerHTML = '<svg class="svg-icon" viewBox="0 0 24 24" style="animation: gearSpin 1.4s linear infinite; width:14px; height:14px; margin-right:0.4rem; vertical-align:middle;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><span>Rendering FFmpeg...</span>';
 
       // Reset stage stepper
       ['stepIngestion', 'stepTracking', 'stepSubtitles', 'stepCaptions'].forEach(s => {
@@ -6837,7 +7497,7 @@ async function submitPublishJob() {
       const origBtnHTML = btn ? btn.innerHTML : '';
       if (btn) {
         btn.disabled = true;
-        btn.innerHTML = `<svg class="svg-icon" viewBox="0 0 24 24" style="animation: spin 1s linear infinite;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg> <span>Publishing to YouTube...</span>`;
+        btn.innerHTML = `<svg class="svg-icon" viewBox="0 0 24 24" style="animation: pulseGlow 1.2s infinite ease-in-out; width:16px; height:16px; margin-right: 0.4rem; vertical-align: middle;"><circle cx="12" cy="12" r="2"></circle><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"></path></svg> <span>Delivering to Target Channels...</span>`;
       }
 
       try {

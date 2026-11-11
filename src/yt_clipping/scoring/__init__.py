@@ -21,10 +21,16 @@ __all__ = [
     "CaptionSynthesizer",
     "ShortCaptionPackage",
     "ClipIntelligence",
+    "VisualCreativeDirector",
+    "VisualInterventionDecision",
 ]
 
 from .caption_synthesizer import (
     CaptionSynthesizer,
     ShortCaptionPackage,
     ClipIntelligence,
+)
+from .visual_director import (
+    VisualCreativeDirector,
+    VisualInterventionDecision,
 )

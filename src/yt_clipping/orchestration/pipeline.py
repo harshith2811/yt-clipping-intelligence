@@ -9,7 +9,10 @@ from typing import Optional, List, Dict, Any, Tuple
 import uuid
 import os
 import subprocess
+import logging
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from ..contracts.models import (
     ClipJob,
@@ -39,6 +42,7 @@ from ..detection.short_viability import ShortViabilityValidator
 from ..scoring.metadata_generator import MetadataGenerator
 from ..detection.deadair import DeadAirPruner, PruneResult
 from ..rendering.b_roll import BRollOverlayEngine, BRollConfig, BRollOverlayResult
+from ..scoring.visual_director import VisualCreativeDirector, VisualInterventionDecision
 
 
 def remap_transcript_for_keep_intervals(
@@ -161,6 +165,7 @@ class ClippingPipeline:
         viability_validator: Optional[ShortViabilityValidator] = None,
         dead_air_pruner: Optional[DeadAirPruner] = None,
         b_roll_engine: Optional[BRollOverlayEngine] = None,
+        visual_director: Optional[VisualCreativeDirector] = None,
         output_dir: str = "data/rendered_clips",
     ):
         self.rights_policy = rights_policy
@@ -177,6 +182,7 @@ class ClippingPipeline:
         self.viability_validator = viability_validator or ShortViabilityValidator()
         self.dead_air_pruner = dead_air_pruner or DeadAirPruner()
         self.b_roll_engine = b_roll_engine or BRollOverlayEngine()
+        self.visual_director = visual_director or VisualCreativeDirector()
         self.output_dir = output_dir
 
 
@@ -567,7 +573,7 @@ class ClippingPipeline:
                             pruned_tmp_path,
                         ]
                         try:
-                            res = subprocess.run(cut_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                            res = subprocess.run(cut_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
                             if res.returncode == 0 and os.path.exists(pruned_tmp_path) and os.path.getsize(pruned_tmp_path) > 0:
                                 active_source_path = pruned_tmp_path
                         except Exception:
@@ -589,6 +595,33 @@ class ClippingPipeline:
                 output_dir=self.output_dir,
                 transcript=active_transcript,
             )
+
+            # Clean up pruned temp file if one was produced
+            if active_source_path != asset_path and os.path.exists(active_source_path):
+                try:
+                    os.remove(active_source_path)
+                except OSError:
+                    pass
+
+            # Creative Intelligence: Gemini Strategic FLUX Evaluation
+            flux_telemetry = None
+            if getattr(render_profile, "enable_flux", True) and self.visual_director and active_transcript:
+                try:
+                    vis_decision = self.visual_director.evaluate_candidate(
+                        candidate=candidate,
+                        transcript=active_transcript,
+                        video_metadata=job.source_metadata,
+                        available_assets_dir=broll_assets_dir,
+                    )
+                    flux_telemetry = vis_decision.to_dict()
+                    if vis_decision.needed and not vis_decision.broll_video_path:
+                        vis_decision = self.visual_director.execute_intervention(vis_decision, output_dir=self.output_dir)
+                        flux_telemetry = vis_decision.to_dict()
+                    if vis_decision.broll_video_path and os.path.exists(vis_decision.broll_video_path):
+                        broll_assets_dir = os.path.dirname(vis_decision.broll_video_path)
+                        enable_broll = True
+                except Exception as ex:
+                    logger.warning(f"Visual director strategic evaluation error: {ex}")
 
             # Post-render Automated B-Roll Overlay if enabled
             broll_telemetry = None
@@ -625,6 +658,8 @@ class ClippingPipeline:
                 checkpoint_payload["deadair_pruned"] = deadair_telemetry
             if broll_telemetry:
                 checkpoint_payload["broll_overlay"] = broll_telemetry
+            if flux_telemetry:
+                checkpoint_payload["flux_intelligence"] = flux_telemetry
 
             self.journal.record_stage_checkpoint(
                 job,
@@ -862,10 +897,12 @@ class ClippingPipeline:
 
 
 PipelineCoordinator = ClippingPipeline
+RenderPipeline = ClippingPipeline
 
 __all__ = [
     "ClippingPipeline",
     "PipelineCoordinator",
+    "RenderPipeline",
     "remap_transcript_for_keep_intervals",
     "apply_pacing_polish",
 ]

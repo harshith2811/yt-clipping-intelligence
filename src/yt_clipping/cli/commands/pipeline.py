@@ -15,6 +15,7 @@ from ...transcription.transcriber import LocalTranscriber
 from ...detection.segmenter import ContextAwareSegmenter
 from ...scoring.scorecard import ExplainableScorecardScorer
 from ...scoring.metadata_generator import MetadataGenerator
+from ...scoring.visual_director import VisualCreativeDirector
 from ...rendering.renderer import FFmpegRenderer
 from ...qa.verifier import MediaQualityVerifier
 from ...publisher.adapter import DualModeAutopostPublisher
@@ -56,6 +57,7 @@ def build_pipeline(
         llm_api_key=cfg.llm_api_key,
         model=cfg.llm_model,
     )
+    visual_director = VisualCreativeDirector()
 
     return ClippingPipeline(
         rights_policy=rights_policy,
@@ -68,6 +70,7 @@ def build_pipeline(
         publisher=publisher,
         journal=journal,
         metadata_generator=metadata_generator,
+        visual_director=visual_director,
         output_dir=output_dir,
     )
 

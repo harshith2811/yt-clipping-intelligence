@@ -457,6 +457,7 @@ class RenderProfile:
     outro_chime_style: str = "soft_zen"   # soft_zen, soft_double, classic_bell
     # Pacing and Broadcast Polish
     enable_pacing_polish: bool = True
+    enable_flux: bool = True               # Strategic FLUX.1 creative visual asset generation
     audio_fade_in_seconds: float = 0.02   # 20ms anti-pop audio transition
     audio_fade_out_seconds: float = 0.25  # 250ms outro audio transition
     video_fade_in_seconds: float = 0.15   # 150ms subtle hook fade-in

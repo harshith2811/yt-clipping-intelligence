@@ -211,3 +211,55 @@ def test_beast_bounce_rapid_chunks(tmp_path):
     assert sub_gen.bounce_animation is True
     assert sub_gen.uppercase is True
 
+
+def test_nvenc_graceful_cpu_fallback(tmp_path):
+    """Verifies that FFmpegRenderer gracefully falls back to libx264 if NVENC fails."""
+    from unittest.mock import patch, MagicMock
+
+    renderer = FFmpegRenderer(allow_synthetic=False)
+    cand = HighlightCandidate(
+        candidate_id="c_nvenc",
+        video_id="v_nvenc",
+        start_seconds=0.0,
+        end_seconds=5.0,
+        duration_seconds=5.0,
+        score=85.0,
+        breakdown=ScoreBreakdown(),
+        hook_title="NVENC Fallback Test",
+    )
+    profile = RenderProfile(vcodec="h264_nvenc", layout_mode="blur_background")
+
+    dummy_src = tmp_path / "source.mp4"
+    dummy_src.write_bytes(b"dummy source video content for test")
+
+    temp_target = str(tmp_path / "out" / "clip.tmp.mp4")
+
+    # Mock subprocess.run: 1st call (NVENC) fails with returncode 1, 2nd call (CPU libx264) succeeds
+    call_count = [0]
+    def mock_subprocess_run(cmd, *args, **kwargs):
+        call_count[0] += 1
+        res = MagicMock()
+        if call_count[0] == 1:
+            res.returncode = 1
+            res.stderr = "Unknown encoder 'h264_nvenc'"
+            return res
+        else:
+            # CPU fallback call creates output file
+            out_file = kwargs.get("output_path") or cmd[-1]
+            os.makedirs(os.path.dirname(os.path.abspath(out_file)), exist_ok=True)
+            with open(out_file, "wb") as f:
+                f.write(b"rendered_via_cpu_fallback_x264")
+            res.returncode = 0
+            res.stderr = ""
+            return res
+
+    with patch("subprocess.run", side_effect=mock_subprocess_run):
+        rendered = renderer.render_clip(
+            source_path=str(dummy_src),
+            candidate=cand,
+            profile=profile,
+            output_dir=str(tmp_path / "out"),
+        )
+        assert os.path.exists(rendered.file_path)
+        assert call_count[0] == 2  # Proves that initial NVENC failed and CPU fallback was called!
+

@@ -104,21 +104,24 @@ class ClipperStreamer:
         Streams a video directly using in-process Python pipeline when web server is offline.
         """
         try:
-            from ..orchestration.pipeline import RenderPipeline
-            pipeline = RenderPipeline()
-            # Run moment discovery and rendering
-            result = pipeline.run_pipeline(
-                video_id_or_url=video_url_or_id,
-                max_clips=max_clips,
-                layout=layout,
+            from yt_clipping.cli.commands.pipeline import build_pipeline
+            from yt_clipping.contracts.models import RenderProfile
+            pipeline = build_pipeline()
+            profile = RenderProfile(
+                layout_mode=layout,
                 subtitle_preset=subtitle_preset,
-                gpu=gpu,
+                vcodec="h264_nvenc" if gpu else "libx264",
+            )
+            result = pipeline.process_video_multi(
+                video_id=video_url_or_id,
+                max_clips=max_clips,
+                profile=profile,
             )
             return {
                 "success": True,
                 "mode": "in_process",
-                "result": result,
-                "message": f"Successfully processed {video_url_or_id} via in-process RenderPipeline.",
+                "result": [r.job_id for r in result] if result else [],
+                "message": f"Successfully processed {video_url_or_id} via in-process pipeline.",
             }
         except Exception as e:
             return {
@@ -127,6 +130,69 @@ class ClipperStreamer:
                 "error": str(e),
                 "message": f"Could not stream video to clipper: {e}",
             }
+
+    def stream_and_publish(
+        self,
+        video_url_or_id: str,
+        max_clips: int = 1,
+        layout: str = "active_speaker",
+        subtitle_preset: str = "hormozi",
+        gpu: bool = True,
+        auto_publish: bool = True,
+        platforms: Optional[List[str]] = None,
+        target: str = "watched_folder",
+        approved_by_user: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Executes end-to-end stream-to-clipper and publishing workflow directly.
+        If studio web server is online, dispatches to /api/v1/trending/stream-to-clipper.
+        If offline, runs in-process pipeline and hands off to autopost publisher.
+        """
+        payload = {
+            "video_id_or_url": video_url_or_id,
+            "max_clips": max_clips,
+            "layout": layout,
+            "subtitle_preset": subtitle_preset,
+            "gpu": gpu,
+            "auto_publish": True,
+            "platforms": platforms or ["youtube_shorts", "instagram_reels", "tiktok"],
+            "target": target,
+            "approved_by_user": approved_by_user,
+        }
+
+        url = f"{self.studio_url}/api/v1/trending/stream-to-clipper"
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data_bytes,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Antigravity-Streamer/1.0",
+            },
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                return {
+                    "success": True,
+                    "mode": "studio_stream_publish_api",
+                    "job_id": res_data.get("job_id"),
+                    "status": res_data.get("status", "QUEUED"),
+                    "video_id": res_data.get("video_id"),
+                    "message": res_data.get("message", "StreamToClipper publishing pipeline initiated!"),
+                    "check_status_url": res_data.get("check_status_url", f"/api/v1/jobs/{res_data.get('job_id')}"),
+                }
+        except urllib.error.URLError:
+            # Offline in-process execution fallback
+            return self.stream_in_process(
+                video_url_or_id=video_url_or_id,
+                max_clips=max_clips,
+                layout=layout,
+                subtitle_preset=subtitle_preset,
+                gpu=gpu,
+            )
 
     def stream_top_video(
         self,

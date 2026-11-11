@@ -123,3 +123,17 @@ def test_streamer_stream_to_studio_offline_fallback():
         res = streamer.stream_to_studio(video_url_or_id="https://www.youtube.com/watch?v=0e3GPea1Tyg")
         assert res["success"] is True
         mock_in_proc.assert_called_once()
+
+
+def test_streamer_stream_and_publish():
+    """Verifies stream_and_publish workflow dispatch."""
+    streamer = ClipperStreamer(studio_url="http://127.0.0.1:59999")
+    with patch("top_trending_videos_in_youtube.streamer.ClipperStreamer.stream_in_process") as mock_in_proc:
+        mock_in_proc.return_value = {"success": True, "mode": "in_process"}
+        res = streamer.stream_and_publish(
+            video_url_or_id="https://www.youtube.com/watch?v=0e3GPea1Tyg",
+            max_clips=1,
+            auto_publish=True,
+        )
+        assert res["success"] is True
+        mock_in_proc.assert_called_once()
